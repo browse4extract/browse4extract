@@ -19,10 +19,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
@@ -57,7 +57,7 @@ jobs:
 
     - name: Upload artifacts (Windows - Unpacked)
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-Windows-Unpacked
         path: out/win-unpacked/
@@ -65,7 +65,7 @@ jobs:
 
     - name: Upload artifacts (Windows - Installer)
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-Windows-Installer
         path: out/*.exe
@@ -73,7 +73,7 @@ jobs:
 
     - name: Upload artifacts (macOS - Unpacked)
       if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-macOS-Unpacked
         path: out/mac/
@@ -81,7 +81,7 @@ jobs:
 
     - name: Upload artifacts (macOS - Installer)
       if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-macOS-Installer
         path: out/*.dmg
@@ -89,7 +89,7 @@ jobs:
 
     - name: Upload artifacts (Linux - Unpacked)
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-Linux-Unpacked
         path: out/linux-unpacked/
@@ -97,7 +97,7 @@ jobs:
 
     - name: Upload artifacts (Linux - Installer)
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Browse2Extract-Linux-Installer
         path: out/*.AppImage
@@ -110,10 +110,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
