@@ -1,0 +1,75 @@
+appId: com.browse4extract.app
+productName: Browse4Extract
+copyright: Copyright © 2025
+
+directories:
+  output: out
+
+extraResources:
+  - from: assets
+    to: assets
+    filter:
+      - "**/*"
+
+files:
+  - dist/**/*
+  - package.json
+  - node_modules/**/*
+
+win:
+  icon: assets/app_image.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: dir
+      arch:
+        - x64
+  sign: null
+  signingHashAlgorithms: []
+  signDlls: false
+  verifyUpdateCodeSignature: false
+  fileAssociations:
+    - ext: b4e
+      name: Browse4Extract Profile
+      description: Browse4Extract Scraping Profile
+      icon: assets/app_image.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+portable:
+  artifactName: Browse4Extract-Portable.exe
+
+mac:
+  icon: assets/app_image.png
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: dir
+      arch:
+        - x64
+        - arm64
+  fileAssociations:
+    - ext: b4e
+      name: Browse4Extract Profile
+      role: Editor
+
+linux:
+  icon: assets/app_image.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: dir
+      arch:
+        - x64
+  fileAssociations:
+    - ext: b4e
+      description: Browse4Extract Scraping Profile
+      mimeType: application/x-browse4extract-profile

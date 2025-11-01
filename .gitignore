@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+out/
+*.exe
+*.app
+*.dmg
+*.zip
+*.tar.gz
+
+# Development
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated
+Thumbs.db
+desktop.ini
+
+# Electron
+*.asar
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Cache
+.cache/
+.electron-builder-cache/
+
+# Claude AI (local settings only)
+.claude/settings.local.json
+
+# Windows artifacts
+nul
+assets/app_image.psd

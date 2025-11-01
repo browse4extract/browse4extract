@@ -1,0 +1,131 @@
+name: Build Browse2Extract
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        node-version: [18.x]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run security audit
+      run: npm audit --audit-level=moderate
+      continue-on-error: true
+
+    - name: Build application
+      run: npm run build
+
+    - name: Package application (Windows)
+      if: matrix.os == 'windows-latest'
+      run: npm run package
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Package application (macOS)
+      if: matrix.os == 'macos-latest'
+      run: npm run package
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Package application (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: npm run package
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload artifacts (Windows - Unpacked)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-Windows-Unpacked
+        path: out/win-unpacked/
+        retention-days: 5
+
+    - name: Upload artifacts (Windows - Installer)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-Windows-Installer
+        path: out/*.exe
+        retention-days: 5
+
+    - name: Upload artifacts (macOS - Unpacked)
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-macOS-Unpacked
+        path: out/mac/
+        retention-days: 5
+
+    - name: Upload artifacts (macOS - Installer)
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-macOS-Installer
+        path: out/*.dmg
+        retention-days: 5
+
+    - name: Upload artifacts (Linux - Unpacked)
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-Linux-Unpacked
+        path: out/linux-unpacked/
+        retention-days: 5
+
+    - name: Upload artifacts (Linux - Installer)
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Browse2Extract-Linux-Installer
+        path: out/*.AppImage
+        retention-days: 5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          Browse2Extract-Windows-Unpacked/**/*
+          Browse2Extract-Windows-Installer/**/*
+          Browse2Extract-macOS-Unpacked/**/*
+          Browse2Extract-macOS-Installer/**/*
+          Browse2Extract-Linux-Unpacked/**/*
+          Browse2Extract-Linux-Installer/**/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

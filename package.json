@@ -1,0 +1,172 @@
+{
+  "name": "browse4extract",
+  "version": "1.0.0",
+  "description": "A powerful Electron desktop application for extracting web data with visual element selection, featuring Discord integration and multiple export formats",
+  "main": "dist/main/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sielanse/Browse4Extract.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Sielanse/Browse4Extract/issues"
+  },
+  "homepage": "https://github.com/Sielanse/Browse4Extract#readme",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:renderer": "webpack serve --config webpack.renderer.config.js --mode development",
+    "dev:main": "webpack --config webpack.main.config.js --mode development --watch",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "webpack --config webpack.main.config.js --mode production",
+    "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
+    "start": "electron .",
+    "package": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "package:dev": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir"
+  },
+  "keywords": [
+    "electron",
+    "puppeteer",
+    "web-scraping",
+    "data-extraction",
+    "json",
+    "csv",
+    "excel",
+    "visual-picker",
+    "discord-rpc",
+    "typescript",
+    "react"
+  ],
+  "author": "Sielanse @ SieApps",
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
+    "@types/discord-rpc": "^4.0.9",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.42",
+    "@types/react-dom": "^18.2.17",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "copy-webpack-plugin": "^11.0.0",
+    "cross-env": "^10.1.0",
+    "css-loader": "^6.8.1",
+    "electron": "^39.0.0",
+    "electron-builder": "^24.9.1",
+    "html-webpack-plugin": "^5.5.4",
+    "png2icons": "^2.0.1",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.0",
+    "style-loader": "^3.3.3",
+    "tailwindcss": "^4.1.16",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.2.2"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
+    "discord-rpc": "^4.0.1",
+    "electron-squirrel-startup": "^1.0.0",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^0.548.0",
+    "puppeteer": "^24.0.0",
+    "puppeteer-core": "^24.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-adblocker": "^2.13.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "build": {
+    "appId": "com.browse4extract.app",
+    "productName": "Browse4Extract",
+    "directories": {
+      "output": "out"
+    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/app_image.ico",
+      "sign": null,
+      "signingHashAlgorithms": [],
+      "fileAssociations": [
+        {
+          "ext": "b4e",
+          "name": "Browse4Extract Profile",
+          "description": "Browse4Extract Scraping Profile",
+          "icon": "assets/app_image.ico"
+        }
+      ]
+    },
+    "mac": {
+      "icon": "assets/app_image.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "Browse4Extract-Portable.exe"
+    }
+  }
+}

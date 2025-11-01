@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* Custom theme colors */
+@theme {
+  /* Brand Green */
+  --color-brand-green: #6fbb69;
+  --color-brand-green-light: #8acc85;
+  --color-brand-green-dark: #5aa455;
+
+  /* Brand Violet-Rose */
+  --color-brand-violet: #bf8fd7;
+  --color-brand-violet-light: #d6c1e1;
+  --color-brand-violet-dark: #a876c2;
+
+  /* Pure Blacks */
+  --color-pure-black: #000000;
+  --color-almost-black: #0a0a0a;
+  --color-dark-gray: #1a1a1a;
+}
+
+/* Custom scrollbar styling */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background-color: rgb(31 41 55);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(75 85 99);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
