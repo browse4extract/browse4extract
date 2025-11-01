@@ -1299,13 +1299,16 @@ function App() {
                       </h3>
                       <div className="space-y-3">
                         {/* Debug Mode */}
-                        <label className="flex items-start space-x-3 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={tempDebugMode}
-                            onChange={(e) => setTempDebugMode(e.target.checked)}
-                            className="mt-0.5 w-5 h-5 rounded border-gray-700 bg-[#1a1a1a]/50 text-[#6fbb69] focus:ring-2 focus:ring-[#6fbb69] focus:ring-offset-0 cursor-pointer"
-                          />
+                        <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors group">
+                          <div className="relative flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={tempDebugMode}
+                              onChange={(e) => setTempDebugMode(e.target.checked)}
+                              className="peer sr-only"
+                            />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:ring-2 peer-focus:ring-[#6fbb69] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#6fbb69] peer-checked:to-[#bf8fd7]"></div>
+                          </div>
                           <div className="flex-1">
                             <span className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
                               Debug Mode
@@ -1317,13 +1320,16 @@ function App() {
                         </label>
 
                         {/* Discord Rich Presence */}
-                        <label className="flex items-start space-x-3 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={tempDiscordRpc}
-                            onChange={(e) => setTempDiscordRpc(e.target.checked)}
-                            className="mt-0.5 w-5 h-5 rounded border-gray-700 bg-[#1a1a1a]/50 text-[#6fbb69] focus:ring-2 focus:ring-[#6fbb69] focus:ring-offset-0 cursor-pointer"
-                          />
+                        <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors group">
+                          <div className="relative flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={tempDiscordRpc}
+                              onChange={(e) => setTempDiscordRpc(e.target.checked)}
+                              className="peer sr-only"
+                            />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:ring-2 peer-focus:ring-[#6fbb69] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#6fbb69] peer-checked:to-[#bf8fd7]"></div>
+                          </div>
                           <div className="flex-1">
                             <span className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
                               Discord Rich Presence
@@ -1340,13 +1346,13 @@ function App() {
                   <div className="flex space-x-3 pt-4 border-t border-gray-800">
                     <button
                       onClick={() => setShowSettings(false)}
-                      className="flex-1 px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#0a0a0a] border border-gray-800 rounded-lg transition-colors text-sm font-medium"
+                      className="flex-1 px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-700 hover:border-gray-600 rounded-lg transition-colors text-sm font-medium text-gray-200"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSaveSettings}
-                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] rounded-lg transition-all shadow-lg text-sm font-medium"
+                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] rounded-lg transition-all shadow-lg text-sm font-medium text-white"
                     >
                       Save Settings
                     </button>

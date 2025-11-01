@@ -85,7 +85,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                   {/* Cancel */}
                   <button
                     onClick={onClose}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700/50 hover:bg-gray-700/70 text-gray-300 font-medium rounded-lg transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-all border border-gray-600"
                   >
                     <X size={18} />
                     <span>Cancel</span>
