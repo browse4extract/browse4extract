@@ -61,9 +61,12 @@ function App() {
   const [extractedData, setExtractedData] = useState<ScrapedData[]>([]);
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
 
-  // Outputs path
+  // Outputs path - kept for settings functionality
   const [outputsPath, setOutputsPath] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState('Ready to extract data');
+
+  // Suppress unused warning - outputsPath is used in settings
+  void outputsPath;
 
   // Settings
   const [showSettings, setShowSettings] = useState(false);
@@ -649,7 +652,7 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-black text-gray-100">
       {/* Custom Title Bar */}
-      <CustomTitleBar />
+      <CustomTitleBar statusMessage={statusMessage} status={status} />
 
       {/* Header with Menu */}
       <header className="bg-[#0a0a0a]/80 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
@@ -772,26 +775,6 @@ function App() {
           </div>
         </div>
 
-        {/* Status Bar */}
-        <div className={`px-6 py-2 text-xs border-t border-gray-800/50 flex items-center justify-between ${
-          status === 'completed' ? 'bg-green-900/20 text-green-400' :
-          status === 'error' ? 'bg-red-900/20 text-red-400' :
-          status === 'running' ? 'bg-[#6fbb69]/20 text-[#6fbb69]' :
-          'bg-[#0a0a0a]/50'
-        }`}>
-          <span className="flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${
-              status === 'completed' ? 'bg-green-500' :
-              status === 'error' ? 'bg-red-500' :
-              status === 'running' ? 'bg-[#6fbb69] animate-pulse' :
-              'bg-gray-500'
-            }`}></span>
-            <span>{statusMessage}</span>
-          </span>
-          {outputsPath && (
-            <span className="text-gray-400">Outputs: {outputsPath}</span>
-          )}
-        </div>
       </header>
 
       {/* Main Content */}
