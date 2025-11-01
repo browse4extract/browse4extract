@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { DataExtractor, ExtractorType, LogMessage, ScrapedData, ExportFormat } from '../types/types';
 import appIcon from './assets/app_image.png';
+import CustomTitleBar from './components/CustomTitleBar';
+import ConfirmationModal from './components/ConfirmationModal';
 
 interface ProfileData {
   url: string;
@@ -74,6 +76,9 @@ function App() {
   // Visual picker result modal
   const [showPickerResult, setShowPickerResult] = useState(false);
   const [pickerResult, setPickerResult] = useState<any>(null);
+
+  // Close confirmation modal
+  const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
 
   // Auto-scroll refs
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -132,6 +137,11 @@ function App() {
       }
     });
 
+    const cleanupShowCloseConfirmation = window.electronAPI.onShowCloseConfirmation(() => {
+      // Show custom confirmation modal instead of system dialog
+      setShowCloseConfirmation(true);
+    });
+
     // Cleanup function to remove all listeners when component unmounts
     return () => {
       cleanupLog();
@@ -140,6 +150,7 @@ function App() {
       cleanupError();
       cleanupProfileLoaded();
       cleanupSaveBeforeClose();
+      cleanupShowCloseConfirmation();
     };
   }, []); // Empty array = run once on mount
 
@@ -582,6 +593,35 @@ function App() {
     setPendingAction(null);
   };
 
+  // Close confirmation modal handlers
+  const handleCloseConfirmationSave = async () => {
+    setShowCloseConfirmation(false);
+    try {
+      const profileData = getCurrentState();
+      const result = await window.electronAPI.saveProfile(profileData);
+
+      if (result.success) {
+        // Save succeeded, notify main process to proceed with close
+        await window.electronAPI.saveCompletedClose();
+      }
+      // If user canceled save dialog, window will stay open
+    } catch (error) {
+      console.error('Error during save before close:', error);
+      // On error, don't close the window
+    }
+  };
+
+  const handleCloseConfirmationDiscard = async () => {
+    setShowCloseConfirmation(false);
+    // Force close without saving
+    await window.electronAPI.forceClose();
+  };
+
+  const handleCloseConfirmationCancel = () => {
+    setShowCloseConfirmation(false);
+    // Just close modal, don't close window
+  };
+
   const getExportIcon = (format: ExportFormat) => {
     switch (format) {
       case 'json':
@@ -608,13 +648,13 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-black text-gray-100">
+      {/* Custom Title Bar */}
+      <CustomTitleBar />
+
       {/* Header with Menu */}
       <header className="bg-[#0a0a0a]/80 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] bg-clip-text text-transparent">
-              Browse4Extract
-            </h1>
             {hasUnsavedChanges && (
               <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full border border-yellow-500/30">
                 Unsaved changes
@@ -1546,6 +1586,14 @@ function App() {
           </div>
         </Dialog>
       </Transition>
+
+      {/* Close Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showCloseConfirmation}
+        onClose={handleCloseConfirmationCancel}
+        onSave={handleCloseConfirmationSave}
+        onDiscard={handleCloseConfirmationDiscard}
+      />
     </div>
   );
 }

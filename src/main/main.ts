@@ -26,6 +26,10 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    minWidth: 800,
+    minHeight: 600,
+    frame: false,  // Remove native window frame
+    titleBarStyle: 'hidden',  // macOS specific
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -33,8 +37,7 @@ function createWindow(): void {
     },
     title: 'Browse4Extract - Web Data Extractor',
     backgroundColor: '#000000',
-    icon: getIconPath(),
-    autoHideMenuBar: true  // Hide default menu bar
+    icon: getIconPath()
   });
 
   // In development, load from webpack server
@@ -52,26 +55,8 @@ function createWindow(): void {
       // Prevent default close
       e.preventDefault();
 
-      // Show dialog
-      const choice = await dialog.showMessageBox(mainWindow, {
-        type: 'warning',
-        buttons: ['Save Profile', 'Discard Changes', 'Cancel'],
-        defaultId: 0,
-        cancelId: 2,
-        title: 'Unsaved Changes',
-        message: 'You have unsaved changes in your profile.',
-        detail: 'Do you want to save your profile before closing?'
-      });
-
-      if (choice.response === 0) {
-        // Save Profile - notify renderer to show save dialog
-        mainWindow.webContents.send('save-before-close');
-      } else if (choice.response === 1) {
-        // Discard Changes - close without saving
-        hasUnsavedChanges = false;
-        mainWindow.destroy();
-      }
-      // If Cancel (response === 2), do nothing (window stays open)
+      // Send event to renderer to show custom modal
+      mainWindow.webContents.send('show-close-confirmation');
     }
   });
 
@@ -376,6 +361,48 @@ ipcMain.handle('set-unsaved-changes', async (_event, unsaved: boolean) => {
 
 // Handle save completed after close request
 ipcMain.handle('save-completed-close', async () => {
+  hasUnsavedChanges = false;
+  if (mainWindow) {
+    mainWindow.destroy();
+  }
+  return { success: true };
+});
+
+// Window controls for custom title bar
+ipcMain.handle('window-minimize', async () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+  }
+  return { success: true };
+});
+
+ipcMain.handle('window-maximize', async () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+  return { success: true };
+});
+
+ipcMain.handle('window-close', async () => {
+  if (mainWindow) {
+    mainWindow.close();
+  }
+  return { success: true };
+});
+
+ipcMain.handle('window-is-maximized', async () => {
+  if (mainWindow) {
+    return { maximized: mainWindow.isMaximized() };
+  }
+  return { maximized: false };
+});
+
+// Force close without unsaved changes check
+ipcMain.handle('force-close', async () => {
   hasUnsavedChanges = false;
   if (mainWindow) {
     mainWindow.destroy();

@@ -78,6 +78,13 @@ export interface ElectronAPI {
   setUnsavedChanges: (unsaved: boolean) => Promise<any>;
   saveCompletedClose: () => Promise<any>;
   onSaveBeforeClose: (callback: () => void) => (() => void);
+  // Window controls
+  windowMinimize: () => Promise<any>;
+  windowMaximize: () => Promise<any>;
+  windowClose: () => Promise<any>;
+  windowIsMaximized: () => Promise<any>;
+  forceClose: () => Promise<any>;
+  onShowCloseConfirmation: (callback: () => void) => (() => void);
 }
 
 // Extension du Window pour TypeScript

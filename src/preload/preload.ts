@@ -103,5 +103,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('save-before-close', listener);
     // Return cleanup function
     return () => ipcRenderer.removeListener('save-before-close', listener);
+  },
+
+  // Window controls
+  windowMinimize: async (): Promise<any> => {
+    return await ipcRenderer.invoke('window-minimize');
+  },
+
+  windowMaximize: async (): Promise<any> => {
+    return await ipcRenderer.invoke('window-maximize');
+  },
+
+  windowClose: async (): Promise<any> => {
+    return await ipcRenderer.invoke('window-close');
+  },
+
+  windowIsMaximized: async (): Promise<any> => {
+    return await ipcRenderer.invoke('window-is-maximized');
+  },
+
+  forceClose: async (): Promise<any> => {
+    return await ipcRenderer.invoke('force-close');
+  },
+
+  onShowCloseConfirmation: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('show-close-confirmation', listener);
+    // Return cleanup function
+    return () => ipcRenderer.removeListener('show-close-confirmation', listener);
   }
 });
