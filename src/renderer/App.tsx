@@ -652,12 +652,31 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-black text-gray-100">
       {/* Custom Title Bar */}
-      <CustomTitleBar statusMessage={statusMessage} status={status} />
+      <CustomTitleBar />
 
       {/* Header with Menu */}
       <header className="bg-[#0a0a0a]/80 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
         <div className="flex items-center justify-between px-6 py-3">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            {/* Status Display */}
+            <div className="flex items-center space-x-2">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                status === 'running' ? 'bg-blue-500 animate-pulse' :
+                status === 'completed' ? 'bg-green-500' :
+                status === 'error' ? 'bg-red-500' :
+                'bg-gray-500'
+              }`}></span>
+              <span className={`text-sm font-medium ${
+                status === 'running' ? 'text-blue-400' :
+                status === 'completed' ? 'text-green-400' :
+                status === 'error' ? 'text-red-400' :
+                'text-gray-300'
+              }`}>
+                {statusMessage}
+              </span>
+            </div>
+
+            {/* Unsaved changes indicator */}
             {hasUnsavedChanges && (
               <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full border border-yellow-500/30">
                 Unsaved changes

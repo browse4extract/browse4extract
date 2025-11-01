@@ -1,27 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Minus, X, Maximize2, Minimize2 } from 'lucide-react';
 
-interface CustomTitleBarProps {
-  statusMessage: string;
-  status?: 'idle' | 'running' | 'completed' | 'error';
-}
-
-const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ statusMessage, status = 'idle' }) => {
+const CustomTitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
-
-  // Get status color
-  const getStatusColor = () => {
-    switch (status) {
-      case 'running':
-        return 'text-blue-400';
-      case 'completed':
-        return 'text-green-400';
-      case 'error':
-        return 'text-red-400';
-      default:
-        return 'text-gray-300';
-    }
-  };
 
   useEffect(() => {
     // Check initial maximized state
@@ -59,11 +40,7 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ statusMessage, status =
           className="w-5 h-5 mr-3 flex-shrink-0"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         />
-        <span className="text-xs font-medium text-gray-400 mr-2 flex-shrink-0">Browse4Extract</span>
-        <span className="text-xs font-medium text-gray-600 mr-2">|</span>
-        <span className={`text-xs font-medium ${getStatusColor()} truncate`}>
-          {statusMessage}
-        </span>
+        <span className="text-sm font-semibold text-white">Browse4Extract</span>
       </div>
 
       {/* Window controls */}
