@@ -18,12 +18,14 @@ import {
   Info,
   AlertTriangle,
   Settings,
-  Folder
+  Folder,
+  ExternalLink
 } from 'lucide-react';
 import { DataExtractor, ExtractorType, LogMessage, ScrapedData, ExportFormat } from '../types/types';
 import appIcon from './assets/app_image.png';
 import CustomTitleBar from './components/CustomTitleBar';
 import ConfirmationModal from './components/ConfirmationModal';
+import packageJson from '../../package.json';
 
 interface ProfileData {
   url: string;
@@ -247,7 +249,7 @@ function App() {
       setTempOutputsPath(config.outputsPath);
       setTempSavesPath(config.savesPath);
       setTempDebugMode(debugMode);
-      setTempDiscordRpc(config.discordRpcEnabled || false);
+      setTempDiscordRpc(config.enableDiscordRPC || false);
       setShowSettings(true);
     } catch (error) {
       console.error('Error loading config for settings:', error);
@@ -259,7 +261,7 @@ function App() {
       await window.electronAPI.updateConfig({
         outputsPath: tempOutputsPath,
         savesPath: tempSavesPath,
-        discordRpcEnabled: tempDiscordRpc
+        enableDiscordRPC: tempDiscordRpc
       });
       setOutputsPath(tempOutputsPath);
       setDebugMode(tempDebugMode);
@@ -1528,7 +1530,7 @@ function App() {
                         Browse4Extract
                       </Dialog.Title>
                       <Dialog.Description className="text-sm text-gray-400 mt-1">
-                        Web Data Extraction Tool • Version 1.0.0
+                        Web Data Extraction Tool • Version {packageJson.version}
                       </Dialog.Description>
                     </div>
                   </div>
@@ -1620,13 +1622,26 @@ function App() {
                       <div className="w-1 h-5 bg-gradient-to-b from-yellow-500 to-orange-500 rounded-full"></div>
                       <span>About Browse4Extract</span>
                     </h3>
-                    <div className="bg-[#1a1a1a]/50 rounded-lg p-4 border border-gray-800 text-sm text-gray-300 space-y-2">
+                    <div className="bg-[#1a1a1a]/50 rounded-lg p-4 border border-gray-800 text-sm text-gray-300 space-y-3">
                       <p>
                         Browse4Extract is a powerful web data extraction tool designed to help you scrape and export data from websites with ease.
                       </p>
                       <p>
                         Features include visual element picking, multiple export formats (JSON, CSV, Excel), profile management, and advanced scraping capabilities.
                       </p>
+                      <div className="pt-2 border-t border-gray-800/50">
+                        <a
+                          href="https://github.com/browse4extract/browse4extract"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            window.electronAPI.openExternal('https://github.com/browse4extract/browse4extract');
+                          }}
+                          className="inline-flex items-center space-x-2 text-[#6fbb69] hover:text-[#8acc85] transition-colors group"
+                        >
+                          <span className="font-semibold">View on GitHub</span>
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>

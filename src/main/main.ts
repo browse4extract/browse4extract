@@ -66,6 +66,28 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // SECURITY: Set Content Security Policy at session level
+  const { session } = require('electron');
+  session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: file:; " +
+          "font-src 'self' data:; " +
+          "connect-src 'none'; " +
+          "object-src 'none'; " +
+          "base-uri 'self'; " +
+          "form-action 'none'; " +
+          "frame-ancestors 'none';"
+        ]
+      }
+    });
+  });
+
   // Initialize config manager
   configManager = new ConfigManager();
 
@@ -198,6 +220,11 @@ ipcMain.handle('save-profile', async (_event, profileData: any) => {
       throw new Error('Config manager not initialized');
     }
 
+    // SECURITY: Validate profile data before saving
+    if (!validateProfileData(profileData)) {
+      throw new Error('Invalid profile data structure');
+    }
+
     const savesPath = configManager.getSavesPath();
     const defaultFileName = `profile_${Date.now()}.b4e`;
     const defaultPath = path.join(savesPath, defaultFileName);
@@ -212,9 +239,23 @@ ipcMain.handle('save-profile', async (_event, profileData: any) => {
     });
 
     if (!result.canceled && result.filePath) {
+      // SECURITY: Normalize the file path
+      const normalizedPath = path.normalize(path.resolve(result.filePath));
+
+      // SECURITY: Ensure file has .b4e extension
+      if (!normalizedPath.endsWith('.b4e')) {
+        throw new Error('Profile must have .b4e extension');
+      }
+
       const dataToSave = JSON.stringify(profileData, null, 2);
-      fs.writeFileSync(result.filePath, dataToSave, 'utf-8');
-      return { success: true, path: result.filePath };
+
+      // SECURITY: Check data size before writing (max 10MB)
+      if (Buffer.byteLength(dataToSave, 'utf-8') > 10 * 1024 * 1024) {
+        throw new Error('Profile data too large (max 10MB)');
+      }
+
+      fs.writeFileSync(normalizedPath, dataToSave, 'utf-8');
+      return { success: true, path: normalizedPath };
     }
 
     return { success: false, canceled: true };
@@ -225,6 +266,83 @@ ipcMain.handle('save-profile', async (_event, profileData: any) => {
     };
   }
 });
+
+// SECURITY: Validate profile data structure
+function validateProfileData(data: any): boolean {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+
+  // Allowed fields in profile
+  const allowedFields = ['url', 'fileName', 'debugMode', 'exportFormat', 'extractors'];
+
+  // Remove unknown fields
+  for (const key of Object.keys(data)) {
+    if (!allowedFields.includes(key)) {
+      delete data[key];
+    }
+  }
+
+  // Validate url if present
+  if (data.url !== undefined) {
+    if (typeof data.url !== 'string' || data.url.length > 2000) {
+      return false;
+    }
+  }
+
+  // Validate fileName if present
+  if (data.fileName !== undefined) {
+    if (typeof data.fileName !== 'string' || data.fileName.length > 255) {
+      return false;
+    }
+  }
+
+  // Validate debugMode if present
+  if (data.debugMode !== undefined && typeof data.debugMode !== 'boolean') {
+    return false;
+  }
+
+  // Validate exportFormat if present
+  if (data.exportFormat !== undefined) {
+    if (!['json', 'csv', 'excel'].includes(data.exportFormat)) {
+      return false;
+    }
+  }
+
+  // Validate extractors if present
+  if (data.extractors !== undefined) {
+    if (!Array.isArray(data.extractors)) {
+      return false;
+    }
+
+    // Validate each extractor
+    for (const extractor of data.extractors) {
+      if (!extractor || typeof extractor !== 'object') {
+        return false;
+      }
+
+      // Check required fields
+      if (!extractor.id || !extractor.fieldName || !extractor.selector || !extractor.extractorType) {
+        return false;
+      }
+
+      // Validate types
+      if (typeof extractor.fieldName !== 'string' || extractor.fieldName.length > 100) {
+        return false;
+      }
+
+      if (typeof extractor.selector !== 'string' || extractor.selector.length > 500) {
+        return false;
+      }
+
+      if (!['text', 'attribute', 'child-link-url', 'child-link-text'].includes(extractor.extractorType)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
 
 ipcMain.handle('load-profile', async () => {
   try {
@@ -246,8 +364,28 @@ ipcMain.handle('load-profile', async () => {
 
     if (!result.canceled && result.filePaths.length > 0) {
       const filePath = result.filePaths[0];
+
+      // SECURITY: Check file size (max 10MB)
+      const stats = fs.statSync(filePath);
+      if (stats.size > 10 * 1024 * 1024) {
+        throw new Error('Profile file too large (max 10MB)');
+      }
+
       const fileContent = fs.readFileSync(filePath, 'utf-8');
-      const profileData = JSON.parse(fileContent);
+
+      // SECURITY: Validate JSON before parsing
+      let profileData;
+      try {
+        profileData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error('Invalid JSON format in profile file');
+      }
+
+      // SECURITY: Validate profile structure
+      if (!validateProfileData(profileData)) {
+        throw new Error('Invalid or corrupted profile data');
+      }
+
       return { success: true, data: profileData, path: filePath };
     }
 
@@ -296,14 +434,31 @@ ipcMain.handle('update-config', async (_event, newConfig: any) => {
 
 ipcMain.handle('select-folder', async (_event, title: string, defaultPath?: string) => {
   try {
+    // SECURITY: Sanitize and validate defaultPath
+    let safePath = defaultPath;
+    if (safePath) {
+      // Normalize path to prevent traversal attacks
+      safePath = path.normalize(path.resolve(safePath));
+
+      // Verify path exists before using it
+      if (!fs.existsSync(safePath)) {
+        safePath = undefined;
+      }
+    }
+
+    // SECURITY: Sanitize title to prevent injection
+    const safeTitle = String(title).substring(0, 200);
+
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: title,
-      defaultPath: defaultPath,
+      title: safeTitle,
+      defaultPath: safePath,
       properties: ['openDirectory', 'createDirectory']
     });
 
     if (!result.canceled && result.filePaths.length > 0) {
-      return { success: true, path: result.filePaths[0] };
+      // Normalize the selected path
+      const selectedPath = path.normalize(path.resolve(result.filePaths[0]));
+      return { success: true, path: selectedPath };
     }
 
     return { success: false, canceled: true };
@@ -410,6 +565,35 @@ ipcMain.handle('force-close', async () => {
   return { success: true };
 });
 
+// Open external URLs
+ipcMain.handle('open-external', async (_event, url: string) => {
+  try {
+    // SECURITY: Validate URL to prevent malicious protocols
+    if (!url || typeof url !== 'string') {
+      throw new Error('Invalid URL format');
+    }
+
+    // Parse and validate URL
+    const urlObj = new URL(url);
+
+    // Only allow HTTP and HTTPS protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      throw new Error('Only HTTP and HTTPS protocols are allowed');
+    }
+
+    // Additional safety check: ensure URL is properly formed
+    if (!urlObj.hostname) {
+      throw new Error('Invalid URL: missing hostname');
+    }
+
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('Error opening external URL:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 // Handle opening .b4e files (file association)
 let fileToOpen: string | null = null;
 
@@ -435,8 +619,27 @@ app.on('open-file', (event, filePath) => {
 ipcMain.handle('get-startup-profile', async () => {
   if (fileToOpen) {
     try {
+      // SECURITY: Check file size (max 10MB)
+      const stats = fs.statSync(fileToOpen);
+      if (stats.size > 10 * 1024 * 1024) {
+        throw new Error('Profile file too large (max 10MB)');
+      }
+
       const fileContent = fs.readFileSync(fileToOpen, 'utf-8');
-      const profileData = JSON.parse(fileContent);
+
+      // SECURITY: Validate JSON before parsing
+      let profileData;
+      try {
+        profileData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error('Invalid JSON format in profile file');
+      }
+
+      // SECURITY: Validate profile structure
+      if (!validateProfileData(profileData)) {
+        throw new Error('Invalid or corrupted profile data');
+      }
+
       const temp = fileToOpen;
       fileToOpen = null; // Clear after reading
       return { success: true, data: profileData, path: temp };
@@ -454,8 +657,27 @@ ipcMain.handle('get-startup-profile', async () => {
 function loadProfileFromFile(filePath: string) {
   if (mainWindow) {
     try {
+      // SECURITY: Check file size (max 10MB)
+      const stats = fs.statSync(filePath);
+      if (stats.size > 10 * 1024 * 1024) {
+        throw new Error('Profile file too large (max 10MB)');
+      }
+
       const fileContent = fs.readFileSync(filePath, 'utf-8');
-      const profileData = JSON.parse(fileContent);
+
+      // SECURITY: Validate JSON before parsing
+      let profileData;
+      try {
+        profileData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error('Invalid JSON format in profile file');
+      }
+
+      // SECURITY: Validate profile structure
+      if (!validateProfileData(profileData)) {
+        throw new Error('Invalid or corrupted profile data');
+      }
+
       mainWindow.webContents.send('profile-loaded', { success: true, data: profileData, path: filePath });
     } catch (error) {
       mainWindow.webContents.send('profile-loaded', {

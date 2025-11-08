@@ -28,7 +28,7 @@ const CustomTitleBar: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-between h-8 bg-gradient-to-r from-purple-900 to-indigo-900 text-white select-none">
+    <div className="flex items-center justify-between h-8 bg-gradient-to-r from-purple-900 to-indigo-900 text-white select-none relative z-[9999]">
       {/* Draggable area */}
       <div
         className="flex-1 h-full flex items-center px-4 app-drag"

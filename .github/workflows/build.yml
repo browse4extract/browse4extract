@@ -1,12 +1,12 @@
-name: Build Browse2Extract
+name: Release Browse4Extract
 
 on:
-  push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version de la release (ex: 1.0.0)'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -39,74 +39,57 @@ jobs:
 
     - name: Package application (Windows)
       if: matrix.os == 'windows-latest'
-      run: npm run package
+      run: npm run package -- --win nsis zip
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Package application (macOS)
       if: matrix.os == 'macos-latest'
-      run: npm run package
+      run: npm run package -- --mac dmg zip
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Package application (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: npm run package
+      run: npm run package -- --linux AppImage tar.gz
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload artifacts (Windows - Unpacked)
+    - name: Upload artifacts (Windows)
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Browse2Extract-Windows-Unpacked
-        path: out/win-unpacked/
-        retention-days: 5
+        name: windows-artifacts
+        path: |
+          out/*.exe
+          out/*.zip
+        retention-days: 1
 
-    - name: Upload artifacts (Windows - Installer)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Browse2Extract-Windows-Installer
-        path: out/*.exe
-        retention-days: 5
-
-    - name: Upload artifacts (macOS - Unpacked)
+    - name: Upload artifacts (macOS)
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Browse2Extract-macOS-Unpacked
-        path: out/mac/
-        retention-days: 5
+        name: macos-artifacts
+        path: |
+          out/*.dmg
+          out/*.zip
+        retention-days: 1
 
-    - name: Upload artifacts (macOS - Installer)
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Browse2Extract-macOS-Installer
-        path: out/*.dmg
-        retention-days: 5
-
-    - name: Upload artifacts (Linux - Unpacked)
+    - name: Upload artifacts (Linux)
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Browse2Extract-Linux-Unpacked
-        path: out/linux-unpacked/
-        retention-days: 5
-
-    - name: Upload artifacts (Linux - Installer)
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Browse2Extract-Linux-Installer
-        path: out/*.AppImage
-        retention-days: 5
+        name: linux-artifacts
+        path: |
+          out/*.AppImage
+          out/*.tar.gz
+        retention-days: 1
 
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -114,18 +97,43 @@ jobs:
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R artifacts/
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: v${{ github.event.inputs.version }}
+        name: Browse4Extract v${{ github.event.inputs.version }}
+        body: |
+          ## Browse4Extract v${{ github.event.inputs.version }}
+
+          ### Téléchargements
+
+          #### Windows
+          - **Installateur**: `Browse4Extract-Setup-${{ github.event.inputs.version }}.exe`
+          - **Version portable (ZIP)**: `Browse4Extract-${{ github.event.inputs.version }}-win.zip`
+
+          #### macOS
+          - **DMG**: `Browse4Extract-${{ github.event.inputs.version }}.dmg`
+          - **Version portable (ZIP)**: `Browse4Extract-${{ github.event.inputs.version }}-mac.zip`
+
+          #### Linux
+          - **AppImage**: `Browse4Extract-${{ github.event.inputs.version }}.AppImage`
+          - **Archive (TAR.GZ)**: `Browse4Extract-${{ github.event.inputs.version }}-linux.tar.gz`
+
+          ---
+
+          ### Notes de version
+          Ajoutez vos notes de version ici.
         files: |
-          Browse2Extract-Windows-Unpacked/**/*
-          Browse2Extract-Windows-Installer/**/*
-          Browse2Extract-macOS-Unpacked/**/*
-          Browse2Extract-macOS-Installer/**/*
-          Browse2Extract-Linux-Unpacked/**/*
-          Browse2Extract-Linux-Installer/**/*
-        draft: false
+          artifacts/windows-artifacts/*
+          artifacts/macos-artifacts/*
+          artifacts/linux-artifacts/*
+        draft: true
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -131,5 +131,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('show-close-confirmation', listener);
     // Return cleanup function
     return () => ipcRenderer.removeListener('show-close-confirmation', listener);
+  },
+
+  // External links
+  openExternal: async (url: string): Promise<any> => {
+    return await ipcRenderer.invoke('open-external', url);
   }
 });

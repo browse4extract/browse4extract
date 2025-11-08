@@ -85,6 +85,8 @@ export interface ElectronAPI {
   windowIsMaximized: () => Promise<any>;
   forceClose: () => Promise<any>;
   onShowCloseConfirmation: (callback: () => void) => (() => void);
+  // External links
+  openExternal: (url: string) => Promise<any>;
 }
 
 // Extension du Window pour TypeScript

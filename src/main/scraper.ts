@@ -73,9 +73,9 @@ export class Scraper {
       // Initialize cookie handler
       this.cookieHandler = new CookieHandler(this.page);
 
-      // Set a realistic user agent
+      // Set a realistic and up-to-date user agent (Chrome 131 - January 2025)
       await this.page.setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
       );
 
       this.log('success', 'Puppeteer initialized successfully with obstacle handling');

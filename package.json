@@ -78,7 +78,7 @@
     "react-dom": "^18.2.0"
   },
   "build": {
-    "appId": "com.browse4extract.app",
+    "appId": "com.github.browse4extract",
     "productName": "Browse4Extract",
     "directories": {
       "output": "out"
@@ -106,7 +106,7 @@
           ]
         },
         {
-          "target": "dir",
+          "target": "zip",
           "arch": [
             "x64"
           ]
@@ -135,7 +135,7 @@
           ]
         },
         {
-          "target": "dir",
+          "target": "zip",
           "arch": [
             "x64",
             "arm64"
@@ -152,7 +152,7 @@
           ]
         },
         {
-          "target": "dir",
+          "target": "tar.gz",
           "arch": [
             "x64"
           ]
