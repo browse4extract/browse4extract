@@ -130,6 +130,7 @@ jobs:
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Create Release
+      id: create_release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.event.inputs.version }}
@@ -148,3 +149,236 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Generate version.json and index.html for GitHub Pages
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        COMMIT_HASH=$(git rev-parse --short HEAD)
+        REPO_URL="https://github.com/browse4extract/browse4extract"
+        RELEASE_URL="$REPO_URL/releases/download/v$VERSION"
+
+        # Create directory for GitHub Pages
+        mkdir -p gh-pages-deploy
+
+        # Generate version.json
+        cat > gh-pages-deploy/version.json <<EOF
+        {
+          "version": "$VERSION",
+          "buildDate": "$BUILD_DATE",
+          "commitHash": "$COMMIT_HASH",
+          "releaseUrl": "$REPO_URL/releases/tag/v$VERSION",
+          "downloadLinks": {
+            "windows": {
+              "installer": "$RELEASE_URL/Browse4Extract-Setup-$VERSION.exe",
+              "portable": "$RELEASE_URL/Browse4Extract-$VERSION-win.zip"
+            },
+            "macos": {
+              "dmg": "$RELEASE_URL/Browse4Extract-$VERSION.dmg",
+              "portable": "$RELEASE_URL/Browse4Extract-$VERSION-mac.zip"
+            },
+            "linux": {
+              "appimage": "$RELEASE_URL/Browse4Extract-$VERSION.AppImage",
+              "tarball": "$RELEASE_URL/Browse4Extract-$VERSION-linux.tar.gz"
+            }
+          }
+        }
+        EOF
+
+        # Generate index.html
+        cat > gh-pages-deploy/index.html <<'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Browse4Extract - Version Info</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: #fff;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
+            }
+            .container {
+              background: rgba(255, 255, 255, 0.1);
+              backdrop-filter: blur(10px);
+              border-radius: 20px;
+              padding: 40px;
+              max-width: 800px;
+              width: 100%;
+              box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+              font-size: 2.5em;
+              margin-bottom: 10px;
+              text-align: center;
+            }
+            .subtitle {
+              text-align: center;
+              opacity: 0.9;
+              margin-bottom: 30px;
+            }
+            .version-info {
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 10px;
+              padding: 20px;
+              margin-bottom: 20px;
+            }
+            .info-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 10px 0;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .info-row:last-child { border-bottom: none; }
+            .label { font-weight: 600; opacity: 0.8; }
+            .value {
+              font-family: 'Courier New', monospace;
+              background: rgba(0, 0, 0, 0.2);
+              padding: 5px 10px;
+              border-radius: 5px;
+            }
+            .downloads {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 15px;
+              margin-top: 20px;
+            }
+            .download-card {
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 10px;
+              padding: 15px;
+              text-align: center;
+            }
+            .download-card h3 {
+              margin-bottom: 10px;
+              font-size: 1.2em;
+            }
+            .download-btn {
+              display: block;
+              background: rgba(255, 255, 255, 0.2);
+              color: #fff;
+              text-decoration: none;
+              padding: 8px 15px;
+              border-radius: 5px;
+              margin: 5px 0;
+              transition: background 0.3s;
+              font-size: 0.9em;
+            }
+            .download-btn:hover {
+              background: rgba(255, 255, 255, 0.3);
+            }
+            .json-link {
+              text-align: center;
+              margin-top: 30px;
+            }
+            .json-link a {
+              color: #fff;
+              text-decoration: none;
+              background: rgba(255, 255, 255, 0.2);
+              padding: 10px 20px;
+              border-radius: 5px;
+              display: inline-block;
+              transition: background 0.3s;
+            }
+            .json-link a:hover {
+              background: rgba(255, 255, 255, 0.3);
+            }
+            code {
+              background: rgba(0, 0, 0, 0.3);
+              padding: 2px 6px;
+              border-radius: 3px;
+              font-size: 0.9em;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🔍 Browse4Extract</h1>
+            <p class="subtitle">Version Information & Downloads</p>
+
+            <div class="version-info" id="version-info">
+              <div class="info-row">
+                <span class="label">Version:</span>
+                <span class="value" id="version">Loading...</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Build Date:</span>
+                <span class="value" id="buildDate">Loading...</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Commit Hash:</span>
+                <span class="value" id="commitHash">Loading...</span>
+              </div>
+            </div>
+
+            <h2 style="margin-bottom: 15px;">📦 Downloads</h2>
+            <div class="downloads" id="downloads">
+              <div class="download-card">
+                <h3>🪟 Windows</h3>
+                <a href="#" class="download-btn" id="win-installer">Installer (.exe)</a>
+                <a href="#" class="download-btn" id="win-portable">Portable (.zip)</a>
+              </div>
+              <div class="download-card">
+                <h3>🍎 macOS</h3>
+                <a href="#" class="download-btn" id="mac-dmg">DMG</a>
+                <a href="#" class="download-btn" id="mac-portable">Portable (.zip)</a>
+              </div>
+              <div class="download-card">
+                <h3>🐧 Linux</h3>
+                <a href="#" class="download-btn" id="linux-appimage">AppImage</a>
+                <a href="#" class="download-btn" id="linux-tarball">Tarball (.tar.gz)</a>
+              </div>
+            </div>
+
+            <div class="json-link">
+              <p style="margin-bottom: 10px;">For programmatic access:</p>
+              <a href="version.json" target="_blank">📄 version.json</a>
+              <p style="margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                API Endpoint: <code>https://browse4extract.github.io/browse4extract/version.json</code>
+              </p>
+            </div>
+          </div>
+
+          <script>
+            fetch('version.json')
+              .then(response => response.json())
+              .then(data => {
+                document.getElementById('version').textContent = data.version;
+                document.getElementById('buildDate').textContent = new Date(data.buildDate).toLocaleString();
+                document.getElementById('commitHash').textContent = data.commitHash;
+
+                document.getElementById('win-installer').href = data.downloadLinks.windows.installer;
+                document.getElementById('win-portable').href = data.downloadLinks.windows.portable;
+                document.getElementById('mac-dmg').href = data.downloadLinks.macos.dmg;
+                document.getElementById('mac-portable').href = data.downloadLinks.macos.portable;
+                document.getElementById('linux-appimage').href = data.downloadLinks.linux.appimage;
+                document.getElementById('linux-tarball').href = data.downloadLinks.linux.tarball;
+              })
+              .catch(error => {
+                console.error('Error loading version info:', error);
+                document.getElementById('version-info').innerHTML = '<p style="text-align: center; color: #ff6b6b;">Error loading version information</p>';
+              });
+          </script>
+        </body>
+        </html>
+        EOF
+
+        echo "Generated version.json and index.html for v$VERSION"
+        cat gh-pages-deploy/version.json
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./gh-pages-deploy
+        publish_branch: gh-pages
+        commit_message: "Update version info for v${{ github.event.inputs.version }}"
+        user_name: 'github-actions[bot]'
+        user_email: 'github-actions[bot]@users.noreply.github.com'
