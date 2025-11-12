@@ -1,16 +1,16 @@
 {
   "name": "browse4extract",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A powerful Electron desktop application for extracting web data with visual element selection, featuring Discord integration and multiple export formats",
   "main": "dist/main/main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Sielanse/Browse4Extract.git"
+    "url": "https://github.com/browse4extract/browse4extract.git"
   },
   "bugs": {
-    "url": "https://github.com/Sielanse/Browse4Extract/issues"
+    "url": "https://github.com/browse4extract/browse4extract/issues"
   },
-  "homepage": "https://github.com/Sielanse/Browse4Extract#readme",
+  "homepage": "https://browse4extract.github.io/b4e-website",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
     "dev:renderer": "webpack serve --config webpack.renderer.config.js --mode development",
@@ -20,7 +20,12 @@
     "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
     "start": "electron .",
     "package": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
-    "package:dev": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir"
+    "package:dev": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir",
+    "release": "standard-version",
+    "release:patch": "standard-version --release-as patch",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:first": "standard-version --first-release"
   },
   "keywords": [
     "electron",
@@ -35,7 +40,7 @@
     "typescript",
     "react"
   ],
-  "author": "Sielanse @ SieApps",
+  "author": "B4E Team",
   "license": "MIT",
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.16",
@@ -54,6 +59,7 @@
     "png2icons": "^2.0.1",
     "postcss": "^8.5.6",
     "postcss-loader": "^8.2.0",
+    "standard-version": "^9.5.0",
     "style-loader": "^3.3.3",
     "tailwindcss": "^4.1.16",
     "ts-loader": "^9.5.1",
@@ -163,7 +169,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "perMachine": false,
+      "menuCategory": "SieApps",
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "Browse4Extract-Portable.exe"
