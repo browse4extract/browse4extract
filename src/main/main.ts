@@ -17,18 +17,86 @@ let discordRpc: DiscordRpcService | null = null;
 let sessionManager: SessionManager | null = null;
 let hasUnsavedChanges: boolean = false;
 
-// Rate limiting for session operations
-const sessionOperationTimes = new Map<string, number>();
-const RATE_LIMIT_MS = 5000; // 5 seconds between operations
+// SECURITY: Rate limiting for IPC operations
+const ipcOperationTimes = new Map<string, number[]>();
+const RATE_LIMIT_CONFIG = {
+  // Scraping operations (intensive)
+  'start-scraping': { windowMs: 10000, maxRequests: 1 },  // 1 request per 10s
+  'pick-element': { windowMs: 5000, maxRequests: 3 },     // 3 requests per 5s
+  'preview-selector': { windowMs: 3000, maxRequests: 5 }, // 5 requests per 3s
 
+  // Session operations (sensitive)
+  'create-session': { windowMs: 5000, maxRequests: 2 },   // 2 requests per 5s
+  'save-current-session': { windowMs: 5000, maxRequests: 2 },
+  'delete-session': { windowMs: 2000, maxRequests: 3 },
+  'test-session': { windowMs: 3000, maxRequests: 5 },
+
+  // File operations (I/O intensive)
+  'save-profile': { windowMs: 2000, maxRequests: 5 },     // 5 requests per 2s
+  'load-profile': { windowMs: 1000, maxRequests: 10 },
+
+  // Config operations
+  'update-config': { windowMs: 1000, maxRequests: 10 },
+  'update-debug-settings': { windowMs: 1000, maxRequests: 10 },
+
+  // Default for unlisted operations
+  'default': { windowMs: 1000, maxRequests: 30 }          // 30 requests per second
+};
+
+/**
+ * Check if an IPC operation is rate limited
+ * Uses sliding window algorithm
+ * @param operation - IPC channel name
+ * @returns true if allowed, false if rate limited
+ */
 function checkRateLimit(operation: string): boolean {
   const now = Date.now();
-  const lastTime = sessionOperationTimes.get(operation) || 0;
-  if (now - lastTime < RATE_LIMIT_MS) {
+  const config = RATE_LIMIT_CONFIG[operation as keyof typeof RATE_LIMIT_CONFIG] || RATE_LIMIT_CONFIG.default;
+
+  // Get or create timestamp array for this operation
+  if (!ipcOperationTimes.has(operation)) {
+    ipcOperationTimes.set(operation, []);
+  }
+
+  const timestamps = ipcOperationTimes.get(operation)!;
+
+  // Remove timestamps outside the window
+  const windowStart = now - config.windowMs;
+  const validTimestamps = timestamps.filter(time => time > windowStart);
+
+  // Check if under limit
+  if (validTimestamps.length >= config.maxRequests) {
+    logger.log('Browse4Extract', 'warning', `Rate limit exceeded for operation: ${operation}`);
     return false;
   }
-  sessionOperationTimes.set(operation, now);
+
+  // Add current timestamp and update
+  validTimestamps.push(now);
+  ipcOperationTimes.set(operation, validTimestamps);
+
+  // Cleanup old entries periodically (every 100 calls)
+  if (Math.random() < 0.01) {
+    cleanupRateLimitCache();
+  }
+
   return true;
+}
+
+/**
+ * Cleanup rate limit cache to prevent memory leaks
+ */
+function cleanupRateLimitCache(): void {
+  const now = Date.now();
+  const maxAge = 60000; // 1 minute
+
+  for (const [operation, timestamps] of ipcOperationTimes.entries()) {
+    const validTimestamps = timestamps.filter(time => now - time < maxAge);
+    if (validTimestamps.length === 0) {
+      ipcOperationTimes.delete(operation);
+    } else {
+      ipcOperationTimes.set(operation, validTimestamps);
+    }
+  }
 }
 
 // Set custom userData path for SieApps organization
@@ -73,6 +141,7 @@ function createWindow(): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,  // SECURITY: Enable renderer process sandboxing
       preload: path.join(__dirname, '../preload/preload.js')
     },
     title: 'Browse4Extract - Web Data Extractor',
@@ -230,6 +299,11 @@ ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
   }
 
   try {
+    // SECURITY: Rate limiting (prevent abuse)
+    if (!checkRateLimit('start-scraping')) {
+      throw new Error('Too many scraping requests. Please wait before starting another scrape.');
+    }
+
     // SECURITY: Validate IPC message size (prevent DoS)
     validateIpcMessageSize(config);
 
@@ -316,6 +390,11 @@ ipcMain.handle('preview-selector', async (_event, url: string, selector: string,
 // Handler pour le Visual Element Picker
 ipcMain.handle('pick-element', async (_event, url: string, sessionProfileId?: string) => {
   try {
+    // SECURITY: Rate limiting (prevent abuse)
+    if (!checkRateLimit('pick-element')) {
+      throw new Error('Too many element picker requests. Please wait a moment.');
+    }
+
     scraper = new Scraper(undefined, undefined, undefined, sessionManager || undefined);
     const result = await scraper.pickElement(url, sessionProfileId);
     return result;
@@ -481,6 +560,15 @@ ipcMain.handle('load-profile', async () => {
 
     if (!result.canceled && result.filePaths.length > 0) {
       const filePath = result.filePaths[0];
+
+      // SECURITY: Validate file extension (prevent loading executable files)
+      const normalizedPath = path.normalize(path.resolve(filePath));
+      const ext = path.extname(normalizedPath).toLowerCase();
+      const dangerousExtensions = ['.exe', '.dll', '.bat', '.cmd', '.vbs', '.js', '.msi', '.scr', '.com'];
+
+      if (dangerousExtensions.includes(ext)) {
+        throw new Error('Cannot load files with potentially dangerous extensions');
+      }
 
       // SECURITY: Check file size (max 10MB)
       const stats = fs.statSync(filePath);

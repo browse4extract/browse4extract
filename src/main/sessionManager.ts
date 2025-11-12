@@ -231,10 +231,31 @@ export class SessionManager {
         return false;
       }
 
-      // Set cookies
+      // SECURITY: Check if session has expired before applying
+      const validationResult = await this.testSession(sessionId);
+      if (!validationResult.success) {
+        logger.warning('Browse4Extract', `Session "${session.name}" validation failed: ${validationResult.error}`);
+        logger.warning('Browse4Extract', 'Session may be expired. Please recreate it if login fails.');
+        // Continue anyway - let the website handle invalid cookies
+      }
+
+      // Set cookies (filter out expired ones)
       if (session.cookies && session.cookies.length > 0) {
-        await page.setCookie(...session.cookies);
-        logger.info('Browse4Extract', `Applied ${session.cookies.length} cookies from session "${session.name}"`);
+        const now = Date.now() / 1000;
+        const validCookies = session.cookies.filter(cookie => {
+          if (cookie.expires && cookie.expires > 0) {
+            return cookie.expires > now;
+          }
+          return true; // Keep session cookies (no expiry)
+        });
+
+        if (validCookies.length === 0) {
+          logger.warning('Browse4Extract', `All cookies in session "${session.name}" have expired`);
+          return false;
+        }
+
+        await page.setCookie(...validCookies);
+        logger.info('Browse4Extract', `Applied ${validCookies.length}/${session.cookies.length} cookies from session "${session.name}" (${session.cookies.length - validCookies.length} expired)`);
       }
 
       // Set localStorage with validation
