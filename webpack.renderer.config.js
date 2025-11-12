@@ -1,8 +1,12 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 
 module.exports = {
-  entry: './src/renderer/index.tsx',
+  entry: {
+    main: './src/renderer/index.tsx',
+    debug: './src/renderer/debug.tsx'
+  },
   target: 'electron-renderer',
   module: {
     rules: [
@@ -26,11 +30,25 @@ module.exports = {
   },
   output: {
     path: path.resolve(__dirname, 'dist/renderer'),
-    filename: 'renderer.js'
+    filename: '[name].js'
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: './src/renderer/index.html'
+      template: './src/renderer/index.html',
+      filename: 'index.html',
+      chunks: ['main']
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/renderer/index.html',
+      filename: 'debug.html',
+      chunks: ['debug'],
+      inject: 'body',
+      scriptLoading: 'blocking'
+    }),
+    new webpack.DefinePlugin({
+      BUILD_DATE: JSON.stringify(new Date().toISOString().split('T')[0]),
+      BUILD_TIME: JSON.stringify(new Date().toISOString()),
+      APP_VERSION: JSON.stringify(require('./package.json').version)
     })
   ],
   resolve: {

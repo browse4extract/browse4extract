@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, Transition, Menu } from '@headlessui/react';
+import { Dialog, Transition } from '@headlessui/react';
 import {
   FolderOpen,
   Save,
@@ -9,7 +9,6 @@ import {
   Trash2,
   Eye,
   MousePointer,
-  ChevronDown,
   FileJson,
   FileSpreadsheet,
   FileText,
@@ -19,13 +18,16 @@ import {
   AlertTriangle,
   Settings,
   Folder,
-  ExternalLink
+  ExternalLink,
+  Key
 } from 'lucide-react';
 import { DataExtractor, ExtractorType, LogMessage, ScrapedData, ExportFormat } from '../types/types';
-import appIcon from './assets/app_image.png';
 import CustomTitleBar from './components/CustomTitleBar';
 import ConfirmationModal from './components/ConfirmationModal';
-import packageJson from '../../package.json';
+import { useToast } from './components/ToastNotification';
+import SessionManager from './components/SessionManager';
+import SessionSelector from './components/SessionSelector';
+import CreditsModal from './components/CreditsModal';
 
 interface ProfileData {
   url: string;
@@ -33,20 +35,28 @@ interface ProfileData {
   debugMode: boolean;
   exportFormat: ExportFormat;
   extractors: DataExtractor[];
+  sessionProfileId?: string;
 }
 
 function App() {
+  // Toast notifications
+  const { showToast } = useToast();
+
   // Configuration
   const [url, setUrl] = useState('');
   const [fileName, setFileName] = useState('');
   const [debugMode, setDebugMode] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('json');
   const [extractors, setExtractors] = useState<DataExtractor[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>(undefined);
+  const [sessionRefreshTrigger, setSessionRefreshTrigger] = useState(0);
+
+  // Validation state for extractors
+  const [validationErrors, setValidationErrors] = useState<Record<string, { fieldName?: boolean; selector?: boolean; attributeName?: boolean }>>({});
 
   // Initial state for change detection
   const [initialState, setInitialState] = useState<ProfileData | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   // Preview
@@ -70,12 +80,19 @@ function App() {
   // Suppress unused warning - outputsPath is used in settings
   void outputsPath;
 
-  // Settings
+  // Modals
   const [showSettings, setShowSettings] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
   const [tempOutputsPath, setTempOutputsPath] = useState('');
   const [tempSavesPath, setTempSavesPath] = useState('');
-  const [tempDebugMode, setTempDebugMode] = useState(false);
   const [tempDiscordRpc, setTempDiscordRpc] = useState(false);
+  const [tempDebugEnabled, setTempDebugEnabled] = useState(false);
+  const [tempShowBrowser, setTempShowBrowser] = useState(false);
+  const [tempAdvancedLogs, setTempAdvancedLogs] = useState(false);
+  const [tempSecurityLevel, setTempSecurityLevel] = useState<'relaxed' | 'normal' | 'strict' | 'paranoid'>('normal');
+  const [tempAutoScroll, setTempAutoScroll] = useState(true);
+  const [tempHandleCookies, setTempHandleCookies] = useState(true);
 
   // Credits modal
   const [showCredits, setShowCredits] = useState(false);
@@ -202,14 +219,15 @@ function App() {
 
     const hasChanges = JSON.stringify(currentState) !== JSON.stringify(initialState);
     setHasUnsavedChanges(hasChanges);
-  }, [url, fileName, debugMode, exportFormat, extractors, initialState]);
+  }, [url, fileName, debugMode, exportFormat, extractors, selectedSessionId, initialState]);
 
   const getCurrentState = (): ProfileData => ({
     url,
     fileName,
     debugMode,
     exportFormat,
-    extractors
+    extractors,
+    sessionProfileId: selectedSessionId
   });
 
   const saveCurrentStateAsInitial = () => {
@@ -246,10 +264,20 @@ function App() {
     // Load current config into temp state
     try {
       const config = await window.electronAPI.getConfig();
+      const debugSettings = await window.electronAPI.getDebugSettings();
+
       setTempOutputsPath(config.outputsPath);
       setTempSavesPath(config.savesPath);
-      setTempDebugMode(debugMode);
       setTempDiscordRpc(config.enableDiscordRPC || false);
+
+      // Load debug settings
+      setTempDebugEnabled(debugSettings.enabled);
+      setTempShowBrowser(debugSettings.showBrowser);
+      setTempAdvancedLogs(debugSettings.advancedLogs);
+      setTempSecurityLevel(debugSettings.securityLevel || 'normal');
+      setTempAutoScroll(debugSettings.autoScroll !== undefined ? debugSettings.autoScroll : true);
+      setTempHandleCookies(debugSettings.handleCookies !== undefined ? debugSettings.handleCookies : true);
+
       setShowSettings(true);
     } catch (error) {
       console.error('Error loading config for settings:', error);
@@ -258,17 +286,68 @@ function App() {
 
   const handleSaveSettings = async () => {
     try {
+      // Get current settings to compare changes
+      const config = await window.electronAPI.getConfig();
+      const debugSettings = await window.electronAPI.getDebugSettings();
+
+      // Log Discord RPC changes
+      if (config.enableDiscordRPC !== tempDiscordRpc) {
+        console.log(`User ${tempDiscordRpc ? 'enabled' : 'disabled'} Discord Rich Presence`);
+      }
+
+      // Log path changes
+      if (config.outputsPath !== tempOutputsPath) {
+        console.log(`User updated outputs path to: ${tempOutputsPath}`);
+      }
+      if (config.savesPath !== tempSavesPath) {
+        console.log(`User updated saves path to: ${tempSavesPath}`);
+      }
+
+      // Log debug mode changes
+      if (debugSettings.enabled !== tempDebugEnabled) {
+        console.log(`User ${tempDebugEnabled ? 'enabled' : 'disabled'} Debug Mode`);
+      }
+      if (debugSettings.showBrowser !== tempShowBrowser) {
+        console.log(`User ${tempShowBrowser ? 'enabled' : 'disabled'} Show Browser mode`);
+      }
+      if (debugSettings.advancedLogs !== tempAdvancedLogs) {
+        console.log(`User ${tempAdvancedLogs ? 'enabled' : 'disabled'} Advanced Logs window`);
+      }
+      if (debugSettings.securityLevel !== tempSecurityLevel) {
+        console.log(`User changed security level from ${debugSettings.securityLevel} to ${tempSecurityLevel}`);
+      }
+      if (debugSettings.autoScroll !== tempAutoScroll) {
+        console.log(`User ${tempAutoScroll ? 'enabled' : 'disabled'} Auto-scroll pages`);
+      }
+      if (debugSettings.handleCookies !== tempHandleCookies) {
+        console.log(`User ${tempHandleCookies ? 'enabled' : 'disabled'} Cookie banner handling`);
+      }
+
       await window.electronAPI.updateConfig({
         outputsPath: tempOutputsPath,
         savesPath: tempSavesPath,
         enableDiscordRPC: tempDiscordRpc
       });
+
+      // Save debug settings
+      await window.electronAPI.updateDebugSettings({
+        enabled: tempDebugEnabled,
+        showBrowser: tempShowBrowser,
+        advancedLogs: tempAdvancedLogs,
+        securityLevel: tempSecurityLevel,
+        autoScroll: tempAutoScroll,
+        handleCookies: tempHandleCookies
+      });
+
       setOutputsPath(tempOutputsPath);
-      setDebugMode(tempDebugMode);
+      setDebugMode(tempShowBrowser); // Keep old debugMode synced with showBrowser
       setShowSettings(false);
       setStatusMessage('Settings saved successfully');
+      console.log('User saved settings successfully');
+      showToast('Settings saved successfully', 'success');
     } catch (error) {
-      alert(`Error saving settings: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error saving settings:', error);
+      showToast(`Failed to save settings: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
 
@@ -298,7 +377,7 @@ function App() {
     try {
       await window.electronAPI.openSavesFolder();
     } catch (error) {
-      alert(`Error opening saves folder: ${error instanceof Error ? error.message : String(error)}`);
+      showToast(`Failed to open saves folder: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
 
@@ -344,14 +423,55 @@ function App() {
     }
   };
 
+  // Validate single extractor and update validation errors
+  const validateExtractor = (extractor: DataExtractor): boolean => {
+    const errors: { fieldName?: boolean; selector?: boolean; attributeName?: boolean } = {};
+    let isValid = true;
+
+    if (!extractor.fieldName.trim()) {
+      errors.fieldName = true;
+      isValid = false;
+    }
+
+    if (!extractor.selector.trim()) {
+      errors.selector = true;
+      isValid = false;
+    }
+
+    if (extractor.extractorType === 'attribute' && !extractor.attributeName?.trim()) {
+      errors.attributeName = true;
+      isValid = false;
+    }
+
+    setValidationErrors(prev => ({
+      ...prev,
+      [extractor.id]: errors
+    }));
+
+    return isValid;
+  };
+
+  // Clear validation errors for an extractor
+  const clearValidationError = (extractorId: string, field?: 'fieldName' | 'selector' | 'attributeName') => {
+    setValidationErrors(prev => {
+      const extractorErrors = { ...prev[extractorId] };
+      if (field) {
+        delete extractorErrors[field];
+      } else {
+        return { ...prev, [extractorId]: {} };
+      }
+      return { ...prev, [extractorId]: extractorErrors };
+    });
+  };
+
   const handlePreviewSelector = async (extractor: DataExtractor) => {
     if (!url.trim()) {
-      alert('Please enter a URL first');
+      showToast('Please enter a URL first', 'warning');
       return;
     }
 
     if (!extractor.selector.trim()) {
-      alert('Please enter a selector');
+      showToast('Please enter a selector', 'warning');
       return;
     }
 
@@ -377,7 +497,7 @@ function App() {
 
   const handlePickElement = async (extractor: DataExtractor) => {
     if (!url.trim()) {
-      alert('Please enter a URL first');
+      showToast('Please enter a URL first', 'warning');
       return;
     }
 
@@ -385,7 +505,7 @@ function App() {
       setIsPickingElement(true);
       setPickingExtractorId(extractor.id);
 
-      const result = await window.electronAPI.pickElement(url);
+      const result = await window.electronAPI.pickElement(url, selectedSessionId);
 
       if (result.success && result.element) {
         // Build updates object
@@ -433,25 +553,30 @@ function App() {
 
   const handleStartScraping = async () => {
     if (!url.trim()) {
-      alert('Please enter a URL');
+      showToast('Please enter a URL before starting extraction', 'warning');
       return;
     }
 
     if (extractors.length === 0) {
-      alert('Please add at least one extractor');
+      showToast('Please add at least one extractor before starting extraction', 'warning');
       return;
     }
 
-    // Validate extractors
+    // Validate extractors and collect validation errors
+    let hasErrors = false;
+    const invalidExtractors: string[] = [];
+
     for (const extractor of extractors) {
-      if (!extractor.fieldName.trim() || !extractor.selector.trim()) {
-        alert('All extractors must have a field name and a selector');
-        return;
+      const isValid = validateExtractor(extractor);
+      if (!isValid) {
+        hasErrors = true;
+        invalidExtractors.push(extractor.fieldName || 'Unnamed field');
       }
-      if (extractor.extractorType === 'attribute' && !extractor.attributeName?.trim()) {
-        alert('Extractors of type "attribute" must have an attribute name');
-        return;
-      }
+    }
+
+    if (hasErrors) {
+      showToast('Some extractors have missing required fields. Please check the highlighted fields below.', 'error');
+      return;
     }
 
     // Reset state
@@ -484,7 +609,8 @@ function App() {
         fileName: finalFileName,
         extractors,
         debugMode,
-        exportFormat
+        exportFormat,
+        sessionProfileId: selectedSessionId
       });
     } catch (error) {
       setIsRunning(false);
@@ -496,7 +622,7 @@ function App() {
   const handleReset = () => {
     if (hasUnsavedChanges) {
       setPendingAction(() => () => performReset());
-      setShowSaveDialog(true);
+      setShowCloseConfirmation(true);
     } else {
       performReset();
     }
@@ -524,13 +650,17 @@ function App() {
       const result = await window.electronAPI.saveProfile(profileData);
 
       if (result.success) {
+        console.log(`User saved profile to: ${result.path}`);
         setStatusMessage(`✓ Profile saved: ${result.path}`);
         saveCurrentStateAsInitial();
+        showToast('Profile saved successfully', 'success');
       } else if (!result.canceled) {
-        alert(`Failed to save profile: ${result.error || 'Unknown error'}`);
+        console.error(`Failed to save profile: ${result.error || 'Unknown error'}`);
+        showToast(`Failed to save profile: ${result.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
-      alert(`Error saving profile: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error saving profile:', error);
+      showToast(`Failed to save profile: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
 
@@ -539,7 +669,7 @@ function App() {
       setPendingAction(() => async () => {
         await performLoadProfile();
       });
-      setShowSaveDialog(true);
+      setShowCloseConfirmation(true);
     } else {
       await performLoadProfile();
     }
@@ -550,13 +680,17 @@ function App() {
       const result = await window.electronAPI.loadProfile();
 
       if (result.success && result.data) {
+        console.log(`User loaded profile from: ${result.path}`);
         loadProfileData(result.data);
         setStatusMessage(`✓ Profile loaded: ${result.path}`);
+        showToast('Profile loaded successfully', 'success');
       } else if (!result.canceled) {
-        alert(`Failed to load profile: ${result.error || 'Unknown error'}`);
+        console.error(`Failed to load profile: ${result.error || 'Unknown error'}`);
+        showToast(`Failed to load profile: ${result.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
-      alert(`Error loading profile: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error loading profile:', error);
+      showToast(`Failed to load profile: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
 
@@ -566,6 +700,7 @@ function App() {
     if (typeof data.debugMode === 'boolean') setDebugMode(data.debugMode);
     if (data.exportFormat) setExportFormat(data.exportFormat);
     if (data.extractors && Array.isArray(data.extractors)) setExtractors(data.extractors);
+    if (data.sessionProfileId) setSelectedSessionId(data.sessionProfileId);
 
     // Set as initial state after loading
     setTimeout(() => {
@@ -577,60 +712,56 @@ function App() {
     try {
       await window.electronAPI.openOutputsFolder();
     } catch (error) {
-      alert(`Error opening outputs folder: ${error instanceof Error ? error.message : String(error)}`);
+      showToast(`Failed to open outputs folder: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
 
   const handleSaveChanges = async () => {
-    await handleSaveProfile();
-    setShowSaveDialog(false);
+    setShowCloseConfirmation(false);
+
+    // Check if this is a window close action (no pending action) or a profile change
     if (pendingAction) {
+      // Profile change/reset scenario
+      await handleSaveProfile();
       pendingAction();
       setPendingAction(null);
+    } else {
+      // Window close scenario
+      try {
+        const profileData = getCurrentState();
+        const result = await window.electronAPI.saveProfile(profileData);
+
+        if (result.success) {
+          // Save succeeded, notify main process to proceed with close
+          await window.electronAPI.saveCompletedClose();
+        }
+        // If user canceled save dialog, window will stay open
+      } catch (error) {
+        console.error('Error during save before close:', error);
+        // On error, don't close the window
+      }
     }
   };
 
-  const handleDiscardChanges = () => {
-    setShowSaveDialog(false);
+  const handleDiscardChanges = async () => {
+    setShowCloseConfirmation(false);
     setHasUnsavedChanges(false);
+
+    // Check if this is a window close action (no pending action) or a profile change
     if (pendingAction) {
+      // Profile change/reset scenario
       pendingAction();
       setPendingAction(null);
+    } else {
+      // Window close scenario - force close without saving
+      await window.electronAPI.forceClose();
     }
   };
 
   const handleCancelAction = () => {
-    setShowSaveDialog(false);
+    setShowCloseConfirmation(false);
     setPendingAction(null);
-  };
-
-  // Close confirmation modal handlers
-  const handleCloseConfirmationSave = async () => {
-    setShowCloseConfirmation(false);
-    try {
-      const profileData = getCurrentState();
-      const result = await window.electronAPI.saveProfile(profileData);
-
-      if (result.success) {
-        // Save succeeded, notify main process to proceed with close
-        await window.electronAPI.saveCompletedClose();
-      }
-      // If user canceled save dialog, window will stay open
-    } catch (error) {
-      console.error('Error during save before close:', error);
-      // On error, don't close the window
-    }
-  };
-
-  const handleCloseConfirmationDiscard = async () => {
-    setShowCloseConfirmation(false);
-    // Force close without saving
-    await window.electronAPI.forceClose();
-  };
-
-  const handleCloseConfirmationCancel = () => {
-    setShowCloseConfirmation(false);
-    // Just close modal, don't close window
+    // Just close modal, don't close window or execute pending action
   };
 
   const getExportIcon = (format: ExportFormat) => {
@@ -655,6 +786,13 @@ function App() {
       default:
         return <Info className="w-4 h-4 text-[#6fbb69] flex-shrink-0" />;
     }
+  };
+
+  const handleSessionCreated = (sessionId: string) => {
+    // Auto-select the newly created session
+    setSelectedSessionId(sessionId);
+    // Trigger refresh of SessionSelector
+    setSessionRefreshTrigger(prev => prev + 1);
   };
 
   return (
@@ -693,94 +831,23 @@ function App() {
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* File Menu */}
-            <Menu as="div" className="relative">
-              <Menu.Button className="flex items-center space-x-1 px-3 py-2 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors text-sm">
-                <span>File</span>
-                <ChevronDown className="w-4 h-4" />
-              </Menu.Button>
-              <Transition
-                enter="transition duration-100 ease-out"
-                enterFrom="transform scale-95 opacity-0"
-                enterTo="transform scale-100 opacity-100"
-                leave="transition duration-75 ease-out"
-                leaveFrom="transform scale-100 opacity-100"
-                leaveTo="transform scale-95 opacity-0"
-              >
-                <Menu.Items className="absolute right-0 mt-2 w-56 bg-[#0a0a0a] border border-gray-800 rounded-lg shadow-xl z-50 overflow-hidden">
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={handleLoadProfile}
-                        disabled={isRunning}
-                        className={`${
-                          active ? 'bg-[#1a1a1a]' : ''
-                        } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''} w-full px-4 py-2.5 text-left text-sm flex items-center space-x-2`}
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                        <span>Open Profile (.b4e)</span>
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={handleSaveProfile}
-                        disabled={isRunning}
-                        className={`${
-                          active ? 'bg-[#1a1a1a]' : ''
-                        } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''} w-full px-4 py-2.5 text-left text-sm flex items-center space-x-2`}
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Save Profile</span>
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <div className="border-t border-gray-800 my-1"></div>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={handleOpenOutputsFolder}
-                        className={`${
-                          active ? 'bg-[#1a1a1a]' : ''
-                        } w-full px-4 py-2.5 text-left text-sm flex items-center space-x-2`}
-                      >
-                        <Folder className="w-4 h-4" />
-                        <span>Open Outputs Folder</span>
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={handleOpenSavesFolder}
-                        className={`${
-                          active ? 'bg-[#1a1a1a]' : ''
-                        } w-full px-4 py-2.5 text-left text-sm flex items-center space-x-2`}
-                      >
-                        <Folder className="w-4 h-4" />
-                        <span>Open Profiles Folder</span>
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <div className="border-t border-gray-800 my-1"></div>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={handleReset}
-                        disabled={isRunning}
-                        className={`${
-                          active ? 'bg-[#1a1a1a]' : ''
-                        } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''} w-full px-4 py-2.5 text-left text-sm flex items-center space-x-2`}
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>Reset Profile</span>
-                      </button>
-                    )}
-                  </Menu.Item>
-                </Menu.Items>
-              </Transition>
-            </Menu>
+            {/* Sessions Button */}
+            <button
+              onClick={() => setShowSessions(true)}
+              className="flex items-center space-x-1 px-3 py-2 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors text-sm"
+            >
+              <Key className="w-4 h-4" />
+              <span>Sessions</span>
+            </button>
+
+            {/* Files Button */}
+            <button
+              onClick={() => setShowFiles(true)}
+              className="flex items-center space-x-1 px-3 py-2 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors text-sm"
+            >
+              <Folder className="w-4 h-4" />
+              <span>Files</span>
+            </button>
 
             {/* Settings Button */}
             <button
@@ -829,6 +896,21 @@ function App() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Session (Optional)
+              </label>
+              <SessionSelector
+                selectedSessionId={selectedSessionId}
+                onSessionSelect={setSelectedSessionId}
+                onManageSessions={() => setShowSessions(true)}
+                refreshTrigger={sessionRefreshTrigger}
+              />
+              <p className="mt-1.5 text-xs text-gray-500">
+                Select a saved session to scrape authenticated/protected content
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -852,7 +934,10 @@ function App() {
                   {(['json', 'csv', 'excel'] as ExportFormat[]).map((format) => (
                     <button
                       key={format}
-                      onClick={() => setExportFormat(format)}
+                      onClick={() => {
+                        console.log(`User changed export format to ${format.toUpperCase()}`);
+                        setExportFormat(format);
+                      }}
                       disabled={isRunning}
                       className={`flex-1 px-3 py-2.5 rounded-lg flex items-center justify-center space-x-2 transition-all ${
                         exportFormat === format
@@ -922,11 +1007,28 @@ function App() {
                       <input
                         type="text"
                         value={extractor.fieldName}
-                        onChange={(e) => updateExtractor(extractor.id, 'fieldName', e.target.value)}
+                        onChange={(e) => {
+                          updateExtractor(extractor.id, 'fieldName', e.target.value);
+                          if (e.target.value.trim()) {
+                            clearValidationError(extractor.id, 'fieldName');
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (!e.target.value.trim()) {
+                            validateExtractor(extractor);
+                          }
+                        }}
                         placeholder="e.g.: title, price, url"
                         disabled={isRunning}
-                        className="w-full px-3 py-2 bg-[#0a0a0a] border border-gray-700 rounded-lg focus:ring-2 focus:ring-[#6fbb69] focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm"
+                        className={`w-full px-3 py-2 bg-[#0a0a0a] border rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm ${
+                          validationErrors[extractor.id]?.fieldName
+                            ? 'border-red-500 focus:ring-red-500'
+                            : 'border-gray-700 focus:ring-[#6fbb69]'
+                        }`}
                       />
+                      {validationErrors[extractor.id]?.fieldName && (
+                        <p className="mt-1 text-xs text-red-400">Field name is required</p>
+                      )}
                     </div>
 
                     <div>
@@ -934,14 +1036,33 @@ function App() {
                         CSS Selector <span className="text-red-400">*</span>
                       </label>
                       <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          value={extractor.selector || ''}
-                          onChange={(e) => updateExtractor(extractor.id, 'selector', e.target.value)}
-                          placeholder="e.g.: .product-title, #price"
-                          disabled={isRunning || (isPickingElement && pickingExtractorId === extractor.id)}
-                          className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-gray-700 rounded-lg focus:ring-2 focus:ring-[#6fbb69] focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm"
-                        />
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={extractor.selector || ''}
+                            onChange={(e) => {
+                              updateExtractor(extractor.id, 'selector', e.target.value);
+                              if (e.target.value.trim()) {
+                                clearValidationError(extractor.id, 'selector');
+                              }
+                            }}
+                            onBlur={(e) => {
+                              if (!e.target.value.trim()) {
+                                validateExtractor(extractor);
+                              }
+                            }}
+                            placeholder="e.g.: .product-title, #price"
+                            disabled={isRunning || (isPickingElement && pickingExtractorId === extractor.id)}
+                            className={`w-full px-3 py-2 bg-[#0a0a0a] border rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm ${
+                              validationErrors[extractor.id]?.selector
+                                ? 'border-red-500 focus:ring-red-500'
+                                : 'border-gray-700 focus:ring-[#6fbb69]'
+                            }`}
+                          />
+                          {validationErrors[extractor.id]?.selector && (
+                            <p className="mt-1 text-xs text-red-400">CSS selector is required</p>
+                          )}
+                        </div>
                         <button
                           onClick={() => handlePickElement(extractor)}
                           disabled={isRunning || isPickingElement}
@@ -979,11 +1100,28 @@ function App() {
                           <input
                             type="text"
                             value={extractor.attributeName || ''}
-                            onChange={(e) => updateExtractor(extractor.id, 'attributeName', e.target.value)}
+                            onChange={(e) => {
+                              updateExtractor(extractor.id, 'attributeName', e.target.value);
+                              if (e.target.value.trim()) {
+                                clearValidationError(extractor.id, 'attributeName');
+                              }
+                            }}
+                            onBlur={(e) => {
+                              if (!e.target.value.trim() && extractor.extractorType === 'attribute') {
+                                validateExtractor(extractor);
+                              }
+                            }}
                             placeholder="e.g.: href, src"
                             disabled={isRunning}
-                            className="w-full px-3 py-2 bg-[#0a0a0a] border border-gray-700 rounded-lg focus:ring-2 focus:ring-[#6fbb69] focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm"
+                            className={`w-full px-3 py-2 bg-[#0a0a0a] border rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 placeholder-gray-500 text-sm ${
+                              validationErrors[extractor.id]?.attributeName
+                                ? 'border-red-500 focus:ring-red-500'
+                                : 'border-gray-700 focus:ring-[#6fbb69]'
+                            }`}
                           />
+                          {validationErrors[extractor.id]?.attributeName && (
+                            <p className="mt-1 text-xs text-red-400">Attribute name is required</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1126,72 +1264,6 @@ function App() {
         </div>
       </div>
 
-      {/* Save Changes Dialog */}
-      <Transition show={showSaveDialog} as={React.Fragment}>
-        <Dialog onClose={handleCancelAction} className="relative z-50">
-          <Transition.Child
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Transition.Child
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-md w-full border border-gray-800">
-                <div className="p-6 space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <AlertTriangle className="w-6 h-6 text-yellow-400" />
-                    </div>
-                    <div className="flex-1">
-                      <Dialog.Title className="text-lg font-semibold text-gray-100">
-                        Unsaved Changes
-                      </Dialog.Title>
-                      <Dialog.Description className="text-sm text-gray-400 mt-1">
-                        You have unsaved changes in your profile. Do you want to save them before continuing?
-                      </Dialog.Description>
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-3 pt-4">
-                    <button
-                      onClick={handleDiscardChanges}
-                      className="flex-1 px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#0a0a0a] border border-gray-800 rounded-lg transition-colors text-sm font-medium"
-                    >
-                      Don't Save
-                    </button>
-                    <button
-                      onClick={handleCancelAction}
-                      className="flex-1 px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#0a0a0a] border border-gray-800 rounded-lg transition-colors text-sm font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveChanges}
-                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] rounded-lg transition-all shadow-lg text-sm font-medium"
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
-        </Dialog>
-      </Transition>
-
       {/* Settings Dialog */}
       <Transition show={showSettings} as={React.Fragment}>
         <Dialog onClose={() => setShowSettings(false)} className="relative z-50">
@@ -1215,8 +1287,8 @@ function App() {
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-2xl w-full border border-gray-800">
-                <div className="p-6 space-y-6">
+              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-2xl w-full border border-gray-800 max-h-[90vh] flex flex-col">
+                <div className="p-6 overflow-y-auto scrollbar-thin flex-1 space-y-4">
                   <div className="flex items-start space-x-3">
                     <div className="w-12 h-12 bg-[#6fbb69]/20 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Settings className="w-6 h-6 text-[#6fbb69]" />
@@ -1293,34 +1365,132 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Scraping Options Section */}
+                    {/* Debug & Security Section */}
                     <div className="pt-4 border-t border-gray-800">
-                      <h3 className="text-md font-semibold text-gray-200 mb-4 flex items-center space-x-2">
-                        <Settings className="w-5 h-5 text-[#bf8fd7]" />
-                        <span>Scraping Options</span>
+                      <h3 className="text-md font-semibold text-gray-200 mb-3 flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-yellow-400" />
+                        <span>Debug & Security</span>
                       </h3>
-                      <div className="space-y-3">
-                        {/* Debug Mode */}
-                        <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors group">
+                      <div className="space-y-2">
+                        {/* Master Debug Switch */}
+                        <label className="flex items-center space-x-3 cursor-pointer p-2.5 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors group">
                           <div className="relative flex items-center">
                             <input
                               type="checkbox"
-                              checked={tempDebugMode}
-                              onChange={(e) => setTempDebugMode(e.target.checked)}
+                              checked={tempDebugEnabled}
+                              onChange={(e) => {
+                                setTempDebugEnabled(e.target.checked);
+                                if (!e.target.checked) {
+                                  setTempShowBrowser(false);
+                                  setTempAdvancedLogs(false);
+                                }
+                              }}
                               className="peer sr-only"
                             />
-                            <div className="w-11 h-6 bg-gray-700 peer-focus:ring-2 peer-focus:ring-[#6fbb69] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#6fbb69] peer-checked:to-[#bf8fd7]"></div>
+                            <div className="w-9 h-5 bg-gray-700 peer-focus:ring-2 peer-focus:ring-[#6fbb69] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#6fbb69] peer-checked:to-[#bf8fd7]"></div>
                           </div>
                           <div className="flex-1">
                             <span className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
                               Debug Mode
                             </span>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Show browser window during scraping for debugging purposes
-                            </p>
                           </div>
                         </label>
 
+                        {/* Sub-options Container */}
+                        {tempDebugEnabled && (
+                          <div className="ml-4 pl-3 border-l border-gray-700 space-y-1.5">
+                            {/* Sub-option 1: Show Browser */}
+                            <label className="flex items-center space-x-2.5 cursor-pointer p-2 rounded-lg hover:bg-[#1a1a1a]/30 transition-colors group">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={tempShowBrowser}
+                                  onChange={(e) => setTempShowBrowser(e.target.checked)}
+                                  className="peer sr-only"
+                                />
+                                <div className="w-8 h-4 bg-gray-700 peer-focus:ring-1 peer-focus:ring-blue-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-blue-500"></div>
+                              </div>
+                              <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                                Show Browser
+                              </span>
+                            </label>
+
+                            {/* Sub-option 2: Advanced Logs */}
+                            <label className="flex items-center space-x-2.5 cursor-pointer p-2 rounded-lg hover:bg-[#1a1a1a]/30 transition-colors group">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={tempAdvancedLogs}
+                                  onChange={(e) => setTempAdvancedLogs(e.target.checked)}
+                                  className="peer sr-only"
+                                />
+                                <div className="w-8 h-4 bg-gray-700 peer-focus:ring-1 peer-focus:ring-purple-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-purple-500"></div>
+                              </div>
+                              <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                                Advanced Logs
+                              </span>
+                            </label>
+
+                            {/* Sub-option 3: Auto-scroll */}
+                            <label className="flex items-center space-x-2.5 cursor-pointer p-2 rounded-lg hover:bg-[#1a1a1a]/30 transition-colors group">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={tempAutoScroll}
+                                  onChange={(e) => setTempAutoScroll(e.target.checked)}
+                                  className="peer sr-only"
+                                />
+                                <div className="w-8 h-4 bg-gray-700 peer-focus:ring-1 peer-focus:ring-green-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-green-500"></div>
+                              </div>
+                              <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                                Auto-scroll pages
+                              </span>
+                            </label>
+
+                            {/* Sub-option 4: Handle Cookies */}
+                            <label className="flex items-center space-x-2.5 cursor-pointer p-2 rounded-lg hover:bg-[#1a1a1a]/30 transition-colors group">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={tempHandleCookies}
+                                  onChange={(e) => setTempHandleCookies(e.target.checked)}
+                                  className="peer sr-only"
+                                />
+                                <div className="w-8 h-4 bg-gray-700 peer-focus:ring-1 peer-focus:ring-orange-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-orange-500"></div>
+                              </div>
+                              <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                                Handle cookie banners
+                              </span>
+                            </label>
+
+                            {/* Security Level */}
+                            <div className="pt-1.5">
+                              <label className="text-xs font-medium text-gray-400 mb-1.5 block">
+                                Security Level
+                              </label>
+                              <select
+                                value={tempSecurityLevel}
+                                onChange={(e) => setTempSecurityLevel(e.target.value as any)}
+                                className="w-full px-2.5 py-1.5 bg-[#0a0a0a] border border-gray-700 rounded-md focus:ring-1 focus:ring-[#6fbb69] focus:border-transparent outline-none transition-all text-gray-100 text-xs"
+                              >
+                                <option value="relaxed">Relaxed</option>
+                                <option value="normal">Normal</option>
+                                <option value="strict">Strict</option>
+                                <option value="paranoid">Paranoid</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Discord Rich Presence Section */}
+                    <div className="pt-4 border-t border-gray-800">
+                      <h3 className="text-md font-semibold text-gray-200 mb-4 flex items-center space-x-2">
+                        <Settings className="w-5 h-5 text-[#bf8fd7]" />
+                        <span>Integrations</span>
+                      </h3>
+                      <div className="space-y-3">
                         {/* Discord Rich Presence */}
                         <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg hover:bg-[#1a1a1a]/50 transition-colors group">
                           <div className="relative flex items-center">
@@ -1344,7 +1514,10 @@ function App() {
                       </div>
                     </div>
                   </div>
+                </div>
 
+                {/* Fixed footer with buttons - outside scroll area */}
+                <div className="p-6 pt-0 flex-shrink-0">
                   <div className="flex space-x-3 pt-4 border-t border-gray-800">
                     <button
                       onClick={() => setShowSettings(false)}
@@ -1357,6 +1530,219 @@ function App() {
                       className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] rounded-lg transition-all shadow-lg text-sm font-medium text-white"
                     >
                       Save Settings
+                    </button>
+                  </div>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Sessions Management Modal */}
+      <Transition show={showSessions} as={React.Fragment}>
+        <Dialog onClose={() => setShowSessions(false)} className="relative z-50">
+          <Transition.Child
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Transition.Child
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-3xl w-full border border-gray-800 max-h-[90vh] flex flex-col">
+                <div className="p-6 overflow-y-auto scrollbar-thin flex-1">
+                  <div className="flex items-start space-x-3 mb-6">
+                    <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    </div>
+                    <div className="flex-1">
+                      <Dialog.Title className="text-lg font-semibold text-gray-100">
+                        Session Management
+                      </Dialog.Title>
+                      <Dialog.Description className="text-sm text-gray-400 mt-1">
+                        Manage your saved login sessions to scrape authenticated content
+                      </Dialog.Description>
+                    </div>
+                  </div>
+
+                  <SessionManager onSessionCreated={handleSessionCreated} />
+                </div>
+
+                {/* Fixed footer with close button */}
+                <div className="p-6 pt-0 flex-shrink-0">
+                  <div className="flex justify-end pt-4 border-t border-gray-800">
+                    <button
+                      onClick={() => setShowSessions(false)}
+                      className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-700 hover:border-gray-600 rounded-lg transition-colors text-sm font-medium text-gray-200"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Files Modal */}
+      <Transition show={showFiles} as={React.Fragment}>
+        <Dialog onClose={() => setShowFiles(false)} className="relative z-50">
+          <Transition.Child
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Transition.Child
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-gray-800">
+                {/* Header */}
+                <div className="p-6 flex-shrink-0 border-b border-gray-800">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                      <Folder className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <div className="flex-1">
+                      <Dialog.Title className="text-xl font-semibold text-white">
+                        Files Management
+                      </Dialog.Title>
+                      <Dialog.Description className="mt-1 text-sm text-gray-400">
+                        Manage your profiles and access folders
+                      </Dialog.Description>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 overflow-y-auto scrollbar-thin flex-1">
+                  {/* Profiles Section */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center">
+                      <Save className="w-4 h-4 mr-2" />
+                      Profiles
+                    </h3>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => {
+                          setShowFiles(false);
+                          handleLoadProfile();
+                        }}
+                        disabled={isRunning}
+                        className="w-full px-4 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] disabled:bg-[#0a0a0a] disabled:opacity-50 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors text-left flex items-center space-x-3"
+                      >
+                        <FolderOpen className="w-5 h-5 text-blue-400" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">Open Profile (.b4e)</div>
+                          <div className="text-xs text-gray-500">Load a saved scraping configuration</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowFiles(false);
+                          handleSaveProfile();
+                        }}
+                        disabled={isRunning}
+                        className="w-full px-4 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] disabled:bg-[#0a0a0a] disabled:opacity-50 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors text-left flex items-center space-x-3"
+                      >
+                        <Save className="w-5 h-5 text-green-400" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">Save Profile</div>
+                          <div className="text-xs text-gray-500">Save current configuration</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowFiles(false);
+                          handleReset();
+                        }}
+                        disabled={isRunning}
+                        className="w-full px-4 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] disabled:bg-[#0a0a0a] disabled:opacity-50 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors text-left flex items-center space-x-3"
+                      >
+                        <RotateCcw className="w-5 h-5 text-orange-400" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">Reset Profile</div>
+                          <div className="text-xs text-gray-500">Clear all configuration and start fresh</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Folders Section */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center">
+                      <Folder className="w-4 h-4 mr-2" />
+                      Folders
+                    </h3>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => {
+                          setShowFiles(false);
+                          handleOpenOutputsFolder();
+                        }}
+                        className="w-full px-4 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-800 hover:border-gray-700 rounded-lg transition-colors text-left flex items-center space-x-3"
+                      >
+                        <Folder className="w-5 h-5 text-yellow-400" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">Open Outputs Folder</div>
+                          <div className="text-xs text-gray-500">View scraped data files</div>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-gray-500" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowFiles(false);
+                          handleOpenSavesFolder();
+                        }}
+                        className="w-full px-4 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-800 hover:border-gray-700 rounded-lg transition-colors text-left flex items-center space-x-3"
+                      >
+                        <Folder className="w-5 h-5 text-purple-400" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">Open Profiles Folder</div>
+                          <div className="text-xs text-gray-500">View saved .b4e profile files</div>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-gray-500" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-6 pt-0 flex-shrink-0">
+                  <div className="flex justify-end pt-4 border-t border-gray-800">
+                    <button
+                      onClick={() => setShowFiles(false)}
+                      className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-700 hover:border-gray-600 rounded-lg transition-colors text-sm font-medium text-gray-200"
+                    >
+                      Close
                     </button>
                   </div>
                 </div>
@@ -1497,175 +1883,14 @@ function App() {
       </Transition>
 
       {/* Credits Modal */}
-      <Transition show={showCredits} as={React.Fragment}>
-        <Dialog onClose={() => setShowCredits(false)} className="relative z-50">
-          <Transition.Child
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Transition.Child
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="bg-[#0a0a0a] rounded-xl shadow-2xl max-w-3xl w-full border border-gray-800 max-h-[90vh] overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-800">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                      <img src={appIcon} alt="Browse4Extract Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1">
-                      <Dialog.Title className="text-xl font-bold bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] bg-clip-text text-transparent">
-                        Browse4Extract
-                      </Dialog.Title>
-                      <Dialog.Description className="text-sm text-gray-400 mt-1">
-                        Web Data Extraction Tool • Version {packageJson.version}
-                      </Dialog.Description>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6">
-                  {/* Technologies */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-200 mb-3 flex items-center space-x-2">
-                      <div className="w-1 h-5 bg-gradient-to-b from-[#6fbb69] to-[#bf8fd7] rounded-full"></div>
-                      <span>Technologies Used</span>
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { name: 'Electron', version: '39.0.0', desc: 'Cross-platform desktop framework' },
-                        { name: 'React', version: '18.2.0', desc: 'UI library' },
-                        { name: 'TypeScript', version: '5.3.2', desc: 'Type-safe JavaScript' },
-                        { name: 'Tailwind CSS', version: '3.x', desc: 'Utility-first CSS framework' },
-                        { name: 'Puppeteer', version: '24.0.0', desc: 'Headless browser automation' },
-                        { name: 'ExcelJS', version: '4.4.0', desc: 'Excel file generation' },
-                      ].map((tech) => (
-                        <div key={tech.name} className="bg-[#1a1a1a]/50 rounded-lg p-3 border border-gray-800">
-                          <div className="font-semibold text-gray-200 text-sm">{tech.name}</div>
-                          <div className="text-xs text-[#6fbb69] font-mono">v{tech.version}</div>
-                          <div className="text-xs text-gray-400 mt-1">{tech.desc}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* UI Libraries */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-200 mb-3 flex items-center space-x-2">
-                      <div className="w-1 h-5 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full"></div>
-                      <span>UI Components</span>
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { name: 'Headless UI', desc: 'Accessible UI components' },
-                        { name: 'Lucide React', desc: 'Beautiful icon library' },
-                      ].map((lib) => (
-                        <div key={lib.name} className="bg-[#1a1a1a]/50 rounded-lg p-3 border border-gray-800">
-                          <div className="font-semibold text-gray-200 text-sm">{lib.name}</div>
-                          <div className="text-xs text-gray-400 mt-1">{lib.desc}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Licenses */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-200 mb-3 flex items-center space-x-2">
-                      <div className="w-1 h-5 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>
-                      <span>Open Source Licenses</span>
-                    </h3>
-                    <div className="bg-[#1a1a1a]/50 rounded-lg p-4 border border-gray-800 space-y-3">
-                      <div className="text-sm text-gray-300">
-                        This application is built with open source software and respects the following licenses:
-                      </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex items-start space-x-2">
-                          <span className="text-green-400 mt-0.5">•</span>
-                          <div>
-                            <span className="text-gray-200 font-semibold">MIT License</span>
-                            <span className="text-gray-400"> - React, TypeScript, Tailwind CSS, Headless UI, Lucide React</span>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-2">
-                          <span className="text-green-400 mt-0.5">•</span>
-                          <div>
-                            <span className="text-gray-200 font-semibold">Apache 2.0</span>
-                            <span className="text-gray-400"> - Puppeteer</span>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-2">
-                          <span className="text-green-400 mt-0.5">•</span>
-                          <div>
-                            <span className="text-gray-200 font-semibold">MIT License</span>
-                            <span className="text-gray-400"> - Electron, ExcelJS, and various utilities</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* About */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-200 mb-3 flex items-center space-x-2">
-                      <div className="w-1 h-5 bg-gradient-to-b from-yellow-500 to-orange-500 rounded-full"></div>
-                      <span>About Browse4Extract</span>
-                    </h3>
-                    <div className="bg-[#1a1a1a]/50 rounded-lg p-4 border border-gray-800 text-sm text-gray-300 space-y-3">
-                      <p>
-                        Browse4Extract is a powerful web data extraction tool designed to help you scrape and export data from websites with ease.
-                      </p>
-                      <p>
-                        Features include visual element picking, multiple export formats (JSON, CSV, Excel), profile management, and advanced scraping capabilities.
-                      </p>
-                      <div className="pt-2 border-t border-gray-800/50">
-                        <a
-                          href="https://github.com/browse4extract/browse4extract"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            window.electronAPI.openExternal('https://github.com/browse4extract/browse4extract');
-                          }}
-                          className="inline-flex items-center space-x-2 text-[#6fbb69] hover:text-[#8acc85] transition-colors group"
-                        >
-                          <span className="font-semibold">View on GitHub</span>
-                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-6 border-t border-gray-800 flex justify-end">
-                  <button
-                    onClick={() => setShowCredits(false)}
-                    className="px-6 py-2.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] rounded-lg transition-all shadow-lg text-sm font-medium"
-                  >
-                    Close
-                  </button>
-                </div>
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
-        </Dialog>
-      </Transition>
+      <CreditsModal isOpen={showCredits} onClose={() => setShowCredits(false)} />
 
       {/* Close Confirmation Modal */}
       <ConfirmationModal
         isOpen={showCloseConfirmation}
-        onClose={handleCloseConfirmationCancel}
-        onSave={handleCloseConfirmationSave}
-        onDiscard={handleCloseConfirmationDiscard}
+        onClose={handleCancelAction}
+        onSave={handleSaveChanges}
+        onDiscard={handleDiscardChanges}
       />
     </div>
   );

@@ -1,12 +1,14 @@
 import * as DiscordRPC from 'discord-rpc';
+import { logger } from './Logger';
 
 // Discord Configuration
 // To use Discord RPC:
 // 1. Create a Discord Application at https://discord.com/developers/applications
 // 2. Copy your Application ID
 // 3. Replace the CLIENT_ID below or use environment variables
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1433499788418089024'; // Replace with your Discord Application ID
-const PROJECT_URL = process.env.PROJECT_URL || 'https://github.com/Sielanse/Browse4Extract';
+// NOTE: This CLIENT_ID is public and safe to commit (it's not a secret)
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1433499788418089024';
+const PROJECT_URL = process.env.PROJECT_URL || 'https://github.com/browse4extract/browse4extract';
 
 export class DiscordRpcService {
   private client: DiscordRPC.Client | null = null;
@@ -50,21 +52,21 @@ export class DiscordRpcService {
       this.client = new DiscordRPC.Client({ transport: 'ipc' });
 
       this.client.on('ready', () => {
-        console.log('Discord RPC: Connected successfully');
+        logger.electron('info', 'Discord RPC: Connected successfully');
         this.isConnected = true;
         this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
         this.setIdle();
       });
 
       this.client.on('disconnected', () => {
-        console.log('Discord RPC: Disconnected');
+        logger.electron('info', 'Discord RPC: Disconnected');
         this.isConnected = false;
         this.attemptReconnect();
       });
 
       await this.client.login({ clientId: CLIENT_ID });
     } catch (error) {
-      console.error('Discord RPC: Failed to initialize', error);
+      logger.electron('error', `Discord RPC: Failed to initialize - ${error}`);
       // Don't throw - Discord might not be running, which is fine
       this.attemptReconnect();
     }
@@ -75,7 +77,7 @@ export class DiscordRpcService {
    */
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-      console.log('Discord RPC: Max reconnection attempts reached. Giving up.');
+      logger.electron('warning', 'Discord RPC: Max reconnection attempts reached. Giving up.');
       return;
     }
 
@@ -84,13 +86,13 @@ export class DiscordRpcService {
     }
 
     this.reconnectAttempts++;
-    console.log(`Discord RPC: Attempting reconnection (${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}) in ${this.RECONNECT_DELAY / 1000}s...`);
+    logger.electron('info', `Discord RPC: Attempting reconnection (${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}) in ${this.RECONNECT_DELAY / 1000}s...`);
 
     this.reconnectTimeout = setTimeout(async () => {
       try {
         await this.initialize();
       } catch (error) {
-        console.error('Discord RPC: Reconnection failed', error);
+        logger.electron('error', `Discord RPC: Reconnection failed - ${error}`);
       }
     }, this.RECONNECT_DELAY);
   }
@@ -108,16 +110,16 @@ export class DiscordRpcService {
       this.client.setActivity({
         details: this.truncateText('💤 Waiting for action'),
         state: this.truncateText('Ready to extract data'),
-        largeImageKey: 'idle',
+        largeImageKey: 'logo',
         largeImageText: this.truncateText('Browse4Extract - Web Data Extractor'),
-        smallImageKey: 'logo',
+        smallImageKey: 'idle',
         smallImageText: this.truncateText('By Sielanse @ SieApps'),
         buttons: [
           { label: 'View Project', url: PROJECT_URL }
         ]
       });
     } catch (error) {
-      console.error('Discord RPC: Failed to set idle state', error);
+      logger.electron('error', `Discord RPC: Failed to set idle state - ${error}`);
     }
   }
 
@@ -150,9 +152,9 @@ export class DiscordRpcService {
         details: this.truncateText(`${emoji} Extracting from ${formattedDomain}`),
         state: this.truncateText(`${currentStep}/${totalSteps} items (${progress}%)`),
         startTimestamp: this.startTimestamp,
-        largeImageKey: 'scraping',
+        largeImageKey: 'logo',
         largeImageText: this.truncateText(`Scraping ${formattedDomain} - ${progress}% complete`),
-        smallImageKey: 'logo',
+        smallImageKey: 'scraping',
         smallImageText: this.truncateText('By Sielanse @ SieApps'),
         buttons: [
           { label: 'View Project', url: PROJECT_URL },
@@ -160,7 +162,7 @@ export class DiscordRpcService {
         ]
       });
     } catch (error) {
-      console.error('Discord RPC: Failed to set scraping state', error);
+      logger.electron('error', `Discord RPC: Failed to set scraping state - ${error}`);
     }
   }
 
@@ -193,9 +195,9 @@ export class DiscordRpcService {
       this.client.setActivity({
         details: this.truncateText(`✅ Extraction completed${durationText}`),
         state: this.truncateText(`${itemCount} items from ${formattedDomain}`),
-        largeImageKey: 'success',
+        largeImageKey: 'logo',
         largeImageText: this.truncateText(`Successfully extracted ${itemCount} items`),
-        smallImageKey: 'logo',
+        smallImageKey: 'success',
         smallImageText: this.truncateText('By Sielanse @ SieApps'),
         buttons: [
           { label: 'View Project', url: PROJECT_URL },
@@ -208,7 +210,7 @@ export class DiscordRpcService {
         this.setIdle();
       }, 15000);
     } catch (error) {
-      console.error('Discord RPC: Failed to set completed state', error);
+      logger.electron('error', `Discord RPC: Failed to set completed state - ${error}`);
     }
   }
 
@@ -225,9 +227,9 @@ export class DiscordRpcService {
       this.client.setActivity({
         details: this.truncateText(`❌ Extraction failed${domainInfo}`),
         state: this.truncateText(error),
-        largeImageKey: 'error',
+        largeImageKey: 'logo',
         largeImageText: this.truncateText('An error occurred during extraction'),
-        smallImageKey: 'logo',
+        smallImageKey: 'error',
         smallImageText: this.truncateText('By Sielanse @ SieApps'),
         buttons: [
           { label: 'View Project', url: PROJECT_URL },
@@ -240,7 +242,7 @@ export class DiscordRpcService {
         this.setIdle();
       }, 15000);
     } catch (error) {
-      console.error('Discord RPC: Failed to set error state', error);
+      logger.electron('error', `Discord RPC: Failed to set error state - ${error}`);
     }
   }
 
@@ -253,7 +255,7 @@ export class DiscordRpcService {
     try {
       this.client.clearActivity();
     } catch (error) {
-      console.error('Discord RPC: Failed to clear activity', error);
+      logger.electron('error', `Discord RPC: Failed to clear activity - ${error}`);
     }
   }
 
@@ -273,9 +275,9 @@ export class DiscordRpcService {
         await this.client.destroy();
         this.isConnected = false;
         this.client = null;
-        console.log('Discord RPC: Destroyed');
+        logger.electron('info', 'Discord RPC: Destroyed');
       } catch (error) {
-        console.error('Discord RPC: Failed to destroy', error);
+        logger.electron('error', `Discord RPC: Failed to destroy - ${error}`);
       }
     }
   }

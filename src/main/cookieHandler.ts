@@ -1,4 +1,5 @@
 import { Page } from 'puppeteer';
+import { logger } from './Logger';
 
 /**
  * Cookie banner and modal auto-dismiss handler
@@ -84,6 +85,28 @@ export class CookieHandler {
     'button[title="close"]',
   ];
 
+  // Text patterns for cookie consent buttons (compiled once as class property)
+  // PERFORMANCE: Compiled at instantiation instead of recreating on each call
+  private readonly textPatterns = [
+    // English
+    /^accept$/i,
+    /^accept all$/i,
+    /^i accept$/i,
+    /^agree$/i,
+    /^i agree$/i,
+    /^ok$/i,
+    /^got it$/i,
+    /^allow all$/i,
+    /^continue$/i,
+    // French
+    /^accepter$/i,
+    /^j'accepte$/i,
+    /^d'accord$/i,
+    /^tout accepter$/i,
+    /^autoriser$/i,
+    /^continuer$/i,
+  ];
+
   constructor(page: Page) {
     this.page = page;
   }
@@ -130,26 +153,8 @@ export class CookieHandler {
    */
   private async tryDismissByText(): Promise<number> {
     try {
-      // Common text patterns for accept/agree buttons (case-insensitive)
-      const textPatterns = [
-        // English
-        /^accept$/i,
-        /^accept all$/i,
-        /^i accept$/i,
-        /^agree$/i,
-        /^i agree$/i,
-        /^ok$/i,
-        /^got it$/i,
-        /^allow all$/i,
-        /^continue$/i,
-        // French
-        /^accepter$/i,
-        /^j'accepte$/i,
-        /^d'accord$/i,
-        /^tout accepter$/i,
-        /^autoriser$/i,
-        /^continuer$/i,
-      ];
+      // Serialize patterns to strings for page.evaluate (can't pass RegExp objects)
+      const patternStrings = this.textPatterns.map(p => p.toString());
 
       const clicked = await this.page.evaluate((patterns: string[]) => {
         let clickCount = 0;
@@ -171,14 +176,13 @@ export class CookieHandler {
               // Click the element
               (el as HTMLElement).click();
               clickCount++;
-              console.log(`[CookieHandler] Clicked button with text: "${text}"`);
               break; // Click only the first match
             }
           }
         }
 
         return clickCount;
-      }, textPatterns.map(p => p.toString()));
+      }, patternStrings);
 
       if (clicked > 0) {
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -186,7 +190,7 @@ export class CookieHandler {
 
       return clicked;
     } catch (error) {
-      console.error('[CookieHandler] Error in tryDismissByText:', error);
+      logger.puppeteer('error', `[CookieHandler] Error in tryDismissByText: ${error}`);
       return 0;
     }
   }
@@ -216,7 +220,7 @@ export class CookieHandler {
             // Wait a bit after clicking
             await new Promise(resolve => setTimeout(resolve, 300));
 
-            console.log(`[CookieHandler] Successfully clicked: ${selector}`);
+            logger.puppeteer('info', `[CookieHandler] Successfully clicked: ${selector}`);
           }
         }
       } catch (error) {
@@ -279,7 +283,7 @@ export class CookieHandler {
 
       return { dismissed, success: true };
     } catch (error) {
-      console.error('[CookieHandler] Error handling obstacles:', error);
+      logger.puppeteer('error', `[CookieHandler] Error handling obstacles: ${error}`);
       return { dismissed: 0, success: false };
     }
   }

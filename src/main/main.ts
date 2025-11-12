@@ -1,16 +1,56 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { pathToFileURL } from 'url';
 import { Scraper } from './scraper';
 import { ConfigManager } from './configManager';
 import { DiscordRpcService } from './discordRpc';
-import { ScrapingConfig, LogMessage, ScrapedData, ExtractorType } from '../types/types';
+import { SessionManager } from './sessionManager';
+import { ScrapingConfig, LogMessage, ScrapedData, ExtractorType, AdvancedLogMessage, SessionProfile, SessionCreationResult } from '../types/types';
+import { logger } from './Logger';
 
 let mainWindow: BrowserWindow | null = null;
+let debugWindow: BrowserWindow | null = null;
 let scraper: Scraper | null = null;
 let configManager: ConfigManager | null = null;
 let discordRpc: DiscordRpcService | null = null;
+let sessionManager: SessionManager | null = null;
 let hasUnsavedChanges: boolean = false;
+
+// Rate limiting for session operations
+const sessionOperationTimes = new Map<string, number>();
+const RATE_LIMIT_MS = 5000; // 5 seconds between operations
+
+function checkRateLimit(operation: string): boolean {
+  const now = Date.now();
+  const lastTime = sessionOperationTimes.get(operation) || 0;
+  if (now - lastTime < RATE_LIMIT_MS) {
+    return false;
+  }
+  sessionOperationTimes.set(operation, now);
+  return true;
+}
+
+// Set custom userData path for SieApps organization
+const customUserDataPath = path.join(
+  app.getPath('appData'),
+  'SieApps',
+  'Browse4Extract'
+);
+app.setPath('userData', customUserDataPath);
+
+// SECURITY: Register custom protocol scheme before app is ready
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'b4e',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: false
+    }
+  }
+]);
 
 // Get icon path
 function getIconPath(): string {
@@ -41,12 +81,12 @@ function createWindow(): void {
   });
 
   // In development, load from webpack server
-  // In production, load static HTML file
+  // In production, load via custom b4e:// protocol
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    mainWindow.loadURL('b4e://./index.html');
   }
 
   // Handle window close event (before closing)
@@ -62,6 +102,10 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Close debug window when main window closes
+    if (debugWindow && !debugWindow.isDestroyed()) {
+      debugWindow.close();
+    }
   });
 }
 
@@ -76,7 +120,7 @@ app.whenReady().then(async () => {
           "default-src 'self'; " +
           "script-src 'self'; " +
           "style-src 'self' 'unsafe-inline'; " +
-          "img-src 'self' data: file:; " +
+          "img-src 'self' data: b4e:; " +
           "font-src 'self' data:; " +
           "connect-src 'none'; " +
           "object-src 'none'; " +
@@ -88,8 +132,58 @@ app.whenReady().then(async () => {
     });
   });
 
+  // SECURITY: Register custom protocol handler for serving app files
+  protocol.handle('b4e', (request) => {
+    const url = new URL(request.url);
+    let pathname = decodeURIComponent(url.pathname);
+
+    // Remove leading slash for Windows compatibility
+    if (pathname.startsWith('/')) {
+      pathname = pathname.substring(1);
+    }
+
+    // Determine base directory (dist/renderer in production)
+    const baseDir = path.join(__dirname, '../renderer');
+
+    // Resolve the full path
+    const filePath = path.resolve(baseDir, pathname);
+
+    // SECURITY: Prevent directory traversal attacks
+    const relativePath = path.relative(baseDir, filePath);
+    const isSafe = relativePath &&
+                   !relativePath.startsWith('..') &&
+                   !path.isAbsolute(relativePath);
+
+    if (!isSafe) {
+      logger.error('electron', `[Protocol Handler] Blocked unsafe path access: ${pathname}`);
+      return new Response('Forbidden: Path traversal detected', {
+        status: 403,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    // Serve the file
+    try {
+      return net.fetch(pathToFileURL(filePath).toString());
+    } catch (error) {
+      logger.error('electron', `[Protocol Handler] Error serving file ${pathname}: ${error instanceof Error ? error.message : String(error)}`);
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+  });
+
   // Initialize config manager
   configManager = new ConfigManager();
+
+  // Initialize logger with current debug settings
+  const debugSettings = configManager.getDebugSettings();
+  logger.configure({
+    debugEnabled: debugSettings.enabled,
+    advancedLogsEnabled: debugSettings.advancedLogs,
+    originalConsole: originalMainConsole
+  });
 
   // Initialize Discord Rich Presence (only if enabled)
   if (configManager.isDiscordRPCEnabled()) {
@@ -97,7 +191,15 @@ app.whenReady().then(async () => {
     await discordRpc.initialize();
   }
 
+  // Initialize Session Manager
+  sessionManager = new SessionManager();
+
   createWindow();
+
+  // Open debug window if enabled
+  if (debugSettings.advancedLogs) {
+    createDebugWindow();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -112,6 +214,15 @@ app.on('window-all-closed', () => {
   }
 });
 
+// SECURITY: IPC Message Size Validation Helper
+// Prevents DoS attacks via massive IPC messages causing memory exhaustion
+function validateIpcMessageSize(data: any, maxSizeBytes: number = 1024 * 1024): void {
+  const dataSize = Buffer.byteLength(JSON.stringify(data));
+  if (dataSize > maxSizeBytes) {
+    throw new Error(`IPC message too large: ${dataSize} bytes (max: ${maxSizeBytes} bytes)`);
+  }
+}
+
 // Handle scraping via IPC
 ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
   if (!mainWindow) {
@@ -119,6 +230,9 @@ ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
   }
 
   try {
+    // SECURITY: Validate IPC message size (prevent DoS)
+    validateIpcMessageSize(config);
+
     // Create callback to send real-time logs
     const logCallback = (log: LogMessage) => {
       mainWindow?.webContents.send('scraping-log', log);
@@ -129,7 +243,7 @@ ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
       mainWindow?.webContents.send('data-extracted', data);
     };
 
-    scraper = new Scraper(logCallback, dataCallback, discordRpc || undefined);
+    scraper = new Scraper(logCallback, dataCallback, discordRpc || undefined, sessionManager || undefined);
 
     // Generate default filename if needed
     let fileName = config.fileName.trim();
@@ -188,7 +302,7 @@ ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
 // Handler for selector preview
 ipcMain.handle('preview-selector', async (_event, url: string, selector: string, extractorType: ExtractorType, attributeName?: string) => {
   try {
-    scraper = new Scraper();
+    scraper = new Scraper(undefined, undefined, undefined, sessionManager || undefined);
     const result = await scraper.previewSelector(url, selector, extractorType, attributeName);
     return result;
   } catch (error) {
@@ -200,10 +314,10 @@ ipcMain.handle('preview-selector', async (_event, url: string, selector: string,
 });
 
 // Handler pour le Visual Element Picker
-ipcMain.handle('pick-element', async (_event, url: string) => {
+ipcMain.handle('pick-element', async (_event, url: string, sessionProfileId?: string) => {
   try {
-    scraper = new Scraper();
-    const result = await scraper.pickElement(url);
+    scraper = new Scraper(undefined, undefined, undefined, sessionManager || undefined);
+    const result = await scraper.pickElement(url, sessionProfileId);
     return result;
   } catch (error) {
     return {
@@ -219,6 +333,9 @@ ipcMain.handle('save-profile', async (_event, profileData: any) => {
     if (!configManager) {
       throw new Error('Config manager not initialized');
     }
+
+    // SECURITY: Validate IPC message size (prevent DoS)
+    validateIpcMessageSize(profileData);
 
     // SECURITY: Validate profile data before saving
     if (!validateProfileData(profileData)) {
@@ -524,34 +641,42 @@ ipcMain.handle('save-completed-close', async () => {
 });
 
 // Window controls for custom title bar
-ipcMain.handle('window-minimize', async () => {
-  if (mainWindow) {
-    mainWindow.minimize();
+ipcMain.handle('window-minimize', async (event) => {
+  // Get the window that sent this IPC message
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    window.minimize();
   }
   return { success: true };
 });
 
-ipcMain.handle('window-maximize', async () => {
-  if (mainWindow) {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
+ipcMain.handle('window-maximize', async (event) => {
+  // Get the window that sent this IPC message
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    if (window.isMaximized()) {
+      window.unmaximize();
     } else {
-      mainWindow.maximize();
+      window.maximize();
     }
   }
   return { success: true };
 });
 
-ipcMain.handle('window-close', async () => {
-  if (mainWindow) {
-    mainWindow.close();
+ipcMain.handle('window-close', async (event) => {
+  // Get the window that sent this IPC message
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    window.close();
   }
   return { success: true };
 });
 
-ipcMain.handle('window-is-maximized', async () => {
-  if (mainWindow) {
-    return { maximized: mainWindow.isMaximized() };
+ipcMain.handle('window-is-maximized', async (event) => {
+  // Get the window that sent this IPC message
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    return { maximized: window.isMaximized() };
   }
   return { maximized: false };
 });
@@ -688,6 +813,368 @@ function loadProfileFromFile(filePath: string) {
   }
 }
 
+// SECURITY: Patch global console to intercept all main process logs
+// Export for Logger to prevent infinite recursion
+export const originalMainConsole = {
+  log: console.log,
+  error: console.error,
+  warn: console.warn,
+  info: console.info,
+  debug: console.debug
+};
+
+console.log = (...args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+  logger.nodejs('info', message);
+  // Logs only appear in Debug Tools, not in DevTools
+};
+
+console.error = (...args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+  logger.nodejs('error', message);
+  // Critical errors still need original console for system debugging
+  originalMainConsole.error(...args);
+};
+
+console.warn = (...args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+  logger.nodejs('warning', message);
+  // Logs only appear in Debug Tools
+};
+
+console.info = (...args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+  logger.nodejs('info', message);
+  // Logs only appear in Debug Tools
+};
+
+console.debug = (...args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+  logger.nodejs('debug', message);
+  // Logs only appear in Debug Tools
+};
+
+// Intercept renderer console logs
+ipcMain.on('renderer-console-log', (_event, level: string, args: any[]) => {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+
+  const logLevel = level === 'log' ? 'info' : level as any;
+  logger.log('electron', logLevel, `[Renderer] ${message}`);
+});
+
+// Advanced logging IPC handlers
+ipcMain.handle('get-debug-settings', async () => {
+  if (!configManager) {
+    throw new Error('Config manager not initialized');
+  }
+  return configManager.getDebugSettings();
+});
+
+ipcMain.handle('update-debug-settings', async (_event, settings) => {
+  if (!configManager) {
+    throw new Error('Config manager not initialized');
+  }
+
+  const oldSettings = configManager.getDebugSettings();
+  configManager.updateDebugSettings(settings);
+
+  // Configure logger with new settings
+  logger.configure({
+    debugEnabled: settings.enabled,
+    advancedLogsEnabled: settings.advancedLogs,
+    originalConsole: originalMainConsole
+  });
+
+  // Handle advanced logs window
+  if (settings.advancedLogs && !oldSettings.advancedLogs) {
+    // Open debug window
+    createDebugWindow();
+  } else if (!settings.advancedLogs && oldSettings.advancedLogs) {
+    // Close debug window
+    if (debugWindow) {
+      debugWindow.close();
+      debugWindow = null;
+    }
+  }
+
+  return { success: true };
+});
+
+// ============================================================================
+// SESSION MANAGEMENT IPC HANDLERS
+// ============================================================================
+
+// Create a new session by opening a browser for login
+ipcMain.handle('create-session', async (_event, name: string, loginUrl: string): Promise<SessionCreationResult> => {
+  try {
+    // Rate limiting
+    if (!checkRateLimit('create-session')) {
+      return { success: false, error: 'Too many requests. Please wait a moment.' };
+    }
+
+    if (!sessionManager) {
+      return { success: false, error: 'Session manager not initialized' };
+    }
+
+    // Validate session name
+    if (!name || typeof name !== 'string') {
+      return { success: false, error: 'Session name is required.' };
+    }
+    if (name.length > 100) {
+      return { success: false, error: 'Session name too long (max 100 characters).' };
+    }
+    if (name.trim().length < 3) {
+      return { success: false, error: 'Session name too short (min 3 characters).' };
+    }
+    // Remove dangerous characters from session name
+    const safeName = name.trim().replace(/[\/\\:*?"<>|]/g, '_');
+
+    // Validate URL to prevent SSRF attacks
+    try {
+      const urlObj = new URL(loginUrl);
+
+      // Only allow HTTP and HTTPS protocols
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return { success: false, error: 'Invalid protocol. Only HTTP/HTTPS allowed.' };
+      }
+
+      // Block localhost and loopback IPs
+      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+      if (blockedHosts.includes(urlObj.hostname.toLowerCase())) {
+        return { success: false, error: 'Cannot access localhost or internal networks.' };
+      }
+
+      // Block private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+      const ipMatch = urlObj.hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+      if (ipMatch) {
+        const [, a, b] = ipMatch.map(Number);
+        if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+          return { success: false, error: 'Cannot access private IP ranges.' };
+        }
+        // Also block link-local (169.254.x.x)
+        if (a === 169 && b === 254) {
+          return { success: false, error: 'Cannot access link-local addresses.' };
+        }
+      }
+    } catch (error) {
+      return { success: false, error: 'Invalid URL format.' };
+    }
+
+    logger.info('Browse4Extract', `Creating new session "${safeName}" for URL: ${loginUrl}`);
+
+    // Create a new scraper instance with visible browser
+    const tempScraper = new Scraper(undefined, undefined, undefined, sessionManager);
+    await tempScraper.initialize(true); // visible browser
+
+    const page = tempScraper.getPage();
+    const browser = tempScraper.getBrowser();
+
+    if (!page || !browser) {
+      return { success: false, error: 'Failed to initialize browser' };
+    }
+
+    // Navigate to login URL
+    await page.goto(loginUrl, { waitUntil: 'networkidle0', timeout: 30000 });
+
+    // Store the scraper reference for session capture
+    scraper = tempScraper;
+    sessionManager.setActiveBrowserPage(browser, page);
+
+    logger.success('Browse4Extract', `Browser opened for session "${safeName}". User can now log in.`);
+
+    // Return success - browser stays open for user to log in
+    return {
+      success: true,
+      profile: {
+        id: `temp_${Date.now()}`,
+        name: safeName,
+        domain: new URL(loginUrl).hostname,
+        loginUrl,
+        cookies: [],
+        createdAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Browse4Extract', `Failed to create session: ${errorMessage}`);
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+});
+
+// Save the current session after user has logged in
+ipcMain.handle('save-current-session', async (_event, _sessionId: string, name: string, domain: string, loginUrl?: string): Promise<SessionCreationResult> => {
+  try {
+    // Rate limiting
+    if (!checkRateLimit('save-session')) {
+      return { success: false, error: 'Too many requests. Please wait a moment.' };
+    }
+
+    if (!sessionManager) {
+      return { success: false, error: 'Session manager not initialized' };
+    }
+
+    const page = sessionManager.getActivePage();
+    if (!page) {
+      return { success: false, error: 'No active browser session to capture' };
+    }
+
+    logger.info('Browse4Extract', `Capturing session "${name}"...`);
+
+    // Generate final session ID
+    const finalSessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Capture the session
+    const result = await sessionManager.captureSessionFromPage(page, finalSessionId, name, domain, loginUrl);
+
+    // Close the browser
+    if (scraper) {
+      await scraper.close();
+      scraper = null;
+    }
+
+    sessionManager.clearActiveBrowser();
+
+    if (result.success) {
+      logger.success('Browse4Extract', `Session "${name}" saved successfully`);
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Browse4Extract', `Failed to save session: ${errorMessage}`);
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+});
+
+// List all saved sessions
+ipcMain.handle('list-sessions', async (): Promise<SessionProfile[]> => {
+  try {
+    if (!sessionManager) {
+      logger.warning('Browse4Extract', 'Session manager not initialized');
+      return [];
+    }
+
+    const sessions = await sessionManager.listSessions();
+    logger.info('Browse4Extract', `Found ${sessions.length} saved sessions`);
+    return sessions;
+  } catch (error) {
+    logger.error('Browse4Extract', `Failed to list sessions: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+});
+
+// Delete a session
+ipcMain.handle('delete-session', async (_event, sessionId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Rate limiting
+    if (!checkRateLimit('delete-session')) {
+      return { success: false, error: 'Too many requests. Please wait a moment.' };
+    }
+
+    if (!sessionManager) {
+      return { success: false, error: 'Session manager not initialized' };
+    }
+
+    logger.info('Browse4Extract', `Deleting session: ${sessionId}`);
+    const result = await sessionManager.deleteSession(sessionId);
+
+    if (result.success) {
+      logger.success('Browse4Extract', `Session deleted successfully`);
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Browse4Extract', `Failed to delete session: ${errorMessage}`);
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+});
+
+// Test if a session is still valid
+ipcMain.handle('test-session', async (_event, sessionId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    if (!sessionManager) {
+      return { success: false, error: 'Session manager not initialized' };
+    }
+
+    logger.info('Browse4Extract', `Testing session: ${sessionId}`);
+    const result = await sessionManager.testSession(sessionId);
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Browse4Extract', `Failed to test session: ${errorMessage}`);
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+});
+
+// ============================================================================
+// END SESSION MANAGEMENT HANDLERS
+// ============================================================================
+
+// Function to create debug logs window
+function createDebugWindow(): void {
+  if (debugWindow) {
+    debugWindow.focus();
+    return;
+  }
+
+  debugWindow = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    frame: false, // Remove native window frame
+    titleBarStyle: 'hidden', // macOS specific
+    title: 'Browse4Extract - Debug Tools',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, '../preload/preload.js')
+    },
+    backgroundColor: '#000000',
+    icon: getIconPath(),
+    minWidth: 800,
+    minHeight: 600
+  });
+
+  // Load debug window HTML
+  if (process.env.NODE_ENV === 'development') {
+    debugWindow.loadURL('http://localhost:3000/debug.html');
+  } else {
+    debugWindow.loadURL('b4e://./debug.html');
+  }
+
+  debugWindow.on('closed', () => {
+    debugWindow = null;
+    // Update settings to reflect window closed
+    if (configManager) {
+      const settings = configManager.getDebugSettings();
+      if (settings.advancedLogs) {
+        configManager.updateDebugSettings({ advancedLogs: false });
+      }
+    }
+  });
+}
+
+// Setup logger event forwarding
+logger.on('advanced-log', (log: AdvancedLogMessage) => {
+  // Send to debug window if open
+  if (debugWindow && !debugWindow.isDestroyed()) {
+    debugWindow.webContents.send('advanced-log', log);
+  }
+});
+
 // Handle clean shutdown
 app.on('before-quit', async () => {
   if (scraper) {
@@ -696,4 +1183,9 @@ app.on('before-quit', async () => {
   if (discordRpc) {
     await discordRpc.destroy();
   }
+  if (debugWindow) {
+    debugWindow.close();
+  }
+  // Cleanup logger
+  logger.cleanup();
 });

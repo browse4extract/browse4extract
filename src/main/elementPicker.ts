@@ -1,4 +1,10 @@
 import { Page } from 'puppeteer';
+import { logger } from './Logger';
+
+// Constants for overlay fade timing
+const OVERLAY_FADE_DURATION_MS = 300;
+const OVERLAY_FADE_WAIT_MS = 350;
+const ELEMENT_CHECK_INTERVAL_MS = 100;
 
 /**
  * Visual Element Picker
@@ -30,11 +36,16 @@ export class ElementPicker {
 
     // Block navigation requests at network level
     const navigationBlocker = (request: any) => {
+      // Skip if already handled by adblocker or security monitor
+      if (request.isInterceptResolutionHandled()) {
+        return;
+      }
+
       // Allow only document requests for the current page
       if (request.isNavigationRequest() && request.frame() === this.page?.mainFrame()) {
         // Block navigation to different URLs
         if (request.url() !== this.page?.url()) {
-          console.log('[ElementPicker] Blocked navigation to:', request.url());
+          logger.puppeteer('info', `[ElementPicker] Blocked navigation to: ${request.url()}`);
           request.abort();
           return;
         }
@@ -48,8 +59,23 @@ export class ElementPicker {
     // Store reference to remove listener later
     (this.page as any).__navigationBlocker = navigationBlocker;
 
-    // Inject the picker script into the page
+    // Remove loading overlay JUST BEFORE picker UI injection
     await this.page.evaluate(() => {
+      const overlay = document.getElementById('browse4extract-loading');
+      if (overlay) {
+        overlay.style.transition = 'opacity 0.3s ease';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), OVERLAY_FADE_DURATION_MS);
+      }
+    });
+
+    // Wait for fade-out to complete
+    await new Promise(resolve => setTimeout(resolve, OVERLAY_FADE_WAIT_MS));
+
+    // SECURITY: Ensure cleanup happens even if errors occur
+    try {
+      // Inject the picker script into the page
+      await this.page.evaluate(() => {
       // Remove any existing picker overlay
       const existingOverlay = document.getElementById('browse4extract-picker-overlay');
       if (existingOverlay) {
@@ -536,18 +562,19 @@ export class ElementPicker {
             clearInterval(checkInterval);
             reject(new Error('Element selection cancelled'));
           }
-        }, 100);
+        }, ELEMENT_CHECK_INTERVAL_MS);
       });
-    });
+      });
 
-    // Clean up navigation blocker
-    if ((this.page as any).__navigationBlocker) {
-      this.page.off('request', (this.page as any).__navigationBlocker);
-      delete (this.page as any).__navigationBlocker;
-      await this.page.setRequestInterception(false);
+      return result;
+    } finally {
+      // SECURITY: Always clean up navigation blocker (even on error)
+      if ((this.page as any).__navigationBlocker) {
+        this.page.off('request', (this.page as any).__navigationBlocker);
+        delete (this.page as any).__navigationBlocker;
+        await this.page.setRequestInterception(false);
+      }
     }
-
-    return result;
   }
 
   /**

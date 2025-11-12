@@ -63,6 +63,13 @@ Perfect for:
 - Automatic cookie consent handling
 - Realistic browser fingerprinting
 
+### 🔐 **Session Management** (NEW!)
+- **Save login sessions**: Log in once, scrape forever
+- **Encrypted storage**: Credentials securely stored with Electron safeStorage
+- **Multiple sessions**: Manage sessions for different websites
+- **Auto-load**: Associate sessions with scraping profiles
+- **Protected content**: Access authenticated pages effortlessly
+
 ### 💾 **Export Formats**
 - **JSON**: Structured data for APIs and databases
 - **CSV**: Ready for Excel and data analysis
@@ -96,7 +103,7 @@ Download the latest release for your platform:
 - **macOS**: `Browse4Extract.dmg`
 - **Linux**: `Browse4Extract.AppImage`
 
-👉 [Download from Releases](https://github.com/Sielanse/Browse4Extract/releases)
+👉 [Download from Releases](https://github.com/browse4extract/browse4extract/releases)
 
 ### Build from Source
 
@@ -109,7 +116,7 @@ Download the latest release for your platform:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Sielanse/Browse4Extract.git
+git clone https://github.com/browse4extract/browse4extract.git
 cd Browse4Extract
 
 # Install dependencies
@@ -153,6 +160,44 @@ The Visual Element Picker is the heart of Browse4Extract:
 - Press **ESC** to cancel selection
 - The picker automatically excludes cookie banners and consent popups
 - Generates the most reliable selector possible
+
+### Session Management (Authentication)
+
+Scrape protected content by saving your login sessions:
+
+#### Creating a Session
+
+1. Open **Settings** (hamburger menu → ⚙️ Settings)
+2. Scroll to the **Sessions** section
+3. Click **"New Session"**
+4. Enter:
+   - **Session Name**: e.g., "GitHub Account", "Reddit Login"
+   - **Login URL**: The URL of the login page
+5. Click **"Open Browser for Login"**
+6. **Log in manually** in the browser that opens
+7. Verify you're successfully logged in
+8. Click **"Save Session"** in the app
+9. The browser closes and your session is saved
+
+#### Using a Session
+
+1. In the main interface, find the **"Session"** dropdown (below URL input)
+2. Select your saved session from the list
+3. Start scraping as usual
+4. The session cookies will be automatically loaded before accessing the page
+
+#### Managing Sessions
+
+In Settings → Sessions, you can:
+- **Test**: Verify if a session is still valid
+- **Delete**: Remove a session you no longer need
+- **Create Multiple**: Save sessions for different websites
+
+**Security Notes:**
+- Sessions are encrypted using Electron's `safeStorage`
+- Cookies use your system's secure credential storage (Keychain on macOS, Credential Manager on Windows)
+- No passwords are stored, only session cookies
+- Sessions can expire depending on the website's settings
 
 ### Export Formats
 
@@ -271,7 +316,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 Found a bug? Have a feature request?
 
-👉 [Open an issue](https://github.com/Sielanse/Browse4Extract/issues)
+👉 [Open an issue](https://github.com/browse4extract/browse4extract/issues)
 
 ---
 
@@ -295,10 +340,10 @@ Built with these amazing open-source projects:
 
 <div align="center">
 
-**Made with ❤️ by [Sielanse @ SieApps](https://github.com/Sielanse)**
+**Made with ❤️ by Browse4Extract Team**
 
 ⭐ **Star this repo** if you find it useful!
 
-[Report Bug](https://github.com/Sielanse/Browse4Extract/issues) • [Request Feature](https://github.com/Sielanse/Browse4Extract/issues)
+[Website](https://browse4extract.github.io/b4e-website) • [Report Bug](https://github.com/browse4extract/browse4extract/issues) • [Request Feature](https://github.com/browse4extract/browse4extract/issues)
 
 </div>

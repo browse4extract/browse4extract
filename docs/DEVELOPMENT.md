@@ -99,8 +99,7 @@ Browse4Extract/
 │   │   ├── elementPicker.ts   # Visual element picker overlay
 │   │   ├── cookieHandler.ts   # Cookie consent handling
 │   │   ├── discordRpc.ts      # Discord Rich Presence
-│   │   ├── configManager.ts   # Settings management
-│   │   └── templateManager.ts # Profile (.b4e) management
+│   │   └── configManager.ts   # Settings management
 │   │
 │   ├── renderer/               # Renderer process (React)
 │   │   ├── App.tsx            # Main React component

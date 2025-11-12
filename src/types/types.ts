@@ -17,6 +17,7 @@ export interface ScrapingConfig {
   extractors: DataExtractor[];
   debugMode: boolean;
   exportFormat?: ExportFormat;
+  sessionProfileId?: string; // Session profile to load before scraping
   // Obstacle handling options
   handleObstacles?: boolean; // Auto-handle cookies, popups, ads (default: true)
   blockAds?: boolean; // Block ads and trackers (default: true)
@@ -37,10 +38,54 @@ export interface ScrapedData {
   [key: string]: string | null;
 }
 
+// Session management types
+export interface SessionProfile {
+  id: string;
+  name: string;
+  domain: string;
+  loginUrl?: string;
+  cookies: any[]; // Puppeteer cookie format
+  localStorage?: Record<string, string>;
+  sessionStorage?: Record<string, string>;
+  createdAt: string;
+  lastUsed?: string;
+}
+
+export interface SessionCreationResult {
+  success: boolean;
+  profile?: SessionProfile;
+  error?: string;
+}
+
 export interface LogMessage {
   timestamp: string;
   level: 'info' | 'success' | 'error' | 'warning';
   message: string;
+}
+
+// Advanced logging types
+export type LogCategory = 'nodejs' | 'electron' | 'puppeteer' | 'Browse4Extract';
+export type LogLevel = 'info' | 'success' | 'warning' | 'error' | 'debug';
+
+export interface AdvancedLogMessage {
+  timestamp: string;
+  category: LogCategory;
+  level: LogLevel;
+  message: string;
+  sanitized: boolean;
+}
+
+// Security level for network monitoring
+export type SecurityLevel = 'relaxed' | 'normal' | 'strict' | 'paranoid';
+
+// Debug settings types
+export interface DebugSettings {
+  enabled: boolean;
+  showBrowser: boolean;
+  advancedLogs: boolean;
+  securityLevel?: SecurityLevel;
+  autoScroll?: boolean;
+  handleCookies?: boolean;
 }
 
 export interface ScrapingProgress {
@@ -56,7 +101,7 @@ export interface ScrapingProgress {
 export interface ElectronAPI {
   startScraping: (config: ScrapingConfig) => Promise<void>;
   previewSelector: (url: string, selector: string, extractorType: ExtractorType, attributeName?: string) => Promise<any>;
-  pickElement: (url: string) => Promise<any>;
+  pickElement: (url: string, sessionProfileId?: string) => Promise<any>;
   onScrapingProgress: (callback: (progress: ScrapingProgress) => void) => (() => void);
   onLog: (callback: (log: LogMessage) => void) => (() => void);
   onDataExtracted: (callback: (data: ScrapedData) => void) => (() => void);
@@ -87,6 +132,16 @@ export interface ElectronAPI {
   onShowCloseConfirmation: (callback: () => void) => (() => void);
   // External links
   openExternal: (url: string) => Promise<any>;
+  // Advanced logging & debug
+  onAdvancedLog: (callback: (log: AdvancedLogMessage) => void) => (() => void);
+  getDebugSettings: () => Promise<DebugSettings>;
+  updateDebugSettings: (settings: DebugSettings) => Promise<any>;
+  // Session management
+  createSession: (name: string, loginUrl: string) => Promise<SessionCreationResult>;
+  listSessions: () => Promise<SessionProfile[]>;
+  deleteSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
+  testSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
+  saveCurrentSession: (sessionId: string, name: string, domain: string, loginUrl?: string) => Promise<SessionCreationResult>;
 }
 
 // Extension du Window pour TypeScript

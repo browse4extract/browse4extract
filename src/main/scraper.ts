@@ -9,27 +9,53 @@ import { ScrapingConfig, DataExtractor, ScrapedData, LogMessage, ExportFormat } 
 import { CookieHandler } from './cookieHandler';
 import { ElementPicker } from './elementPicker';
 import { DiscordRpcService } from './discordRpc';
+import { NetworkSecurityMonitor, SecurityLevel } from './NetworkSecurityMonitor';
+import { logger } from './Logger';
+import { SystemInfoDetector } from './systemInfo';
+import { SessionManager } from './sessionManager';
 
 // Configure puppeteer-extra with plugins
 puppeteer.use(StealthPlugin());
-puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
+puppeteer.use(AdblockerPlugin({
+  blockTrackers: true,
+  blockTrackersAndAnnoyances: true,  // Also blocks cookie notices and annoyances
+  useCache: false  // Always fetch latest blocklists
+}));
+
+// Constants for timeouts and delays
+const SCROLL_DELAY_MS = 300;
+const SCROLL_DISTANCE_PX = 300;
+const MAX_SCROLL_TIME_MS = 60000; // 60 seconds
+const OVERLAY_FADE_DURATION_MS = 300;
+const COOKIE_WAIT_MS = 1000;
+const POST_SCROLL_WAIT_MS = 500;
+const PICKER_PREP_WAIT_MS = 300;
+const PAGE_NAVIGATION_TIMEOUT_MS = 30000;
+const PAGE_EVALUATE_TIMEOUT_MS = 30000; // 30 seconds for evaluate calls
+const MAX_SELECTOR_LENGTH = 500;
+const MAX_FILENAME_LENGTH = 255;
 
 export class Scraper {
   private browser: Browser | null = null;
   private page: Page | null = null;
   private cookieHandler: CookieHandler | null = null;
+  private networkMonitor: NetworkSecurityMonitor | null = null;
   private logCallback: ((log: LogMessage) => void) | null = null;
   private dataCallback: ((data: ScrapedData) => void) | null = null;
   private discordRpc: DiscordRpcService | null = null;
+  private securityLevel: SecurityLevel = 'normal';
+  private sessionManager: SessionManager | null = null;
 
   constructor(
     logCallback?: (log: LogMessage) => void,
     dataCallback?: (data: ScrapedData) => void,
-    discordRpc?: DiscordRpcService
+    discordRpc?: DiscordRpcService,
+    sessionManager?: SessionManager
   ) {
     this.logCallback = logCallback || null;
     this.dataCallback = dataCallback || null;
     this.discordRpc = discordRpc || null;
+    this.sessionManager = sessionManager || null;
   }
 
   private log(level: LogMessage['level'], message: string): void {
@@ -42,12 +68,18 @@ export class Scraper {
     if (this.logCallback) {
       this.logCallback(logMessage);
     }
-    console.log(`[${level.toUpperCase()}] ${message}`);
+
+    // Use proper logger with Browse4Extract category instead of console.log
+    logger.browse4extract(level as any, message);
   }
 
-  async initialize(debugMode: boolean): Promise<void> {
+  async initialize(debugMode: boolean, showWatermark: boolean = false): Promise<void> {
     try {
       this.log('info', 'Initializing Puppeteer with stealth mode and ad blocker...');
+
+      // Detect real system information for consistent fingerprinting
+      const systemInfo = SystemInfoDetector.getSystemInfo();
+      this.log('info', `System detected: ${systemInfo.platform}, ${systemInfo.cpuCores} cores, ${systemInfo.deviceMemory}GB RAM, [${systemInfo.languages.join(', ')}]`);
 
       this.browser = await puppeteer.launch({
         headless: !debugMode,
@@ -56,11 +88,17 @@ export class Scraper {
           '--disable-setuid-sandbox',
           '--disable-blink-features=AutomationControlled', // Additional anti-detection
           '--start-maximized', // Start maximized
-          '--force-dark-mode' // Enable dark mode
+          '--force-dark-mode', // Enable dark mode
+          '--disable-infobars', // Disable Chrome infobars
+          '--disable-default-apps' // Disable default apps
         ]
       });
 
       this.page = await this.browser.newPage();
+
+      // SECURITY: Set default timeout for all page operations including evaluate()
+      this.page.setDefaultTimeout(PAGE_EVALUATE_TIMEOUT_MS);
+      this.page.setDefaultNavigationTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
 
       // Set viewport to maximum screen size (Full HD)
       await this.page.setViewport({ width: 1920, height: 1080 });
@@ -73,10 +111,94 @@ export class Scraper {
       // Initialize cookie handler
       this.cookieHandler = new CookieHandler(this.page);
 
-      // Set a realistic and up-to-date user agent (Chrome 131 - January 2025)
-      await this.page.setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-      );
+      // Initialize network security monitor
+      this.networkMonitor = new NetworkSecurityMonitor(this.page, this.securityLevel);
+      await this.networkMonitor.initialize();
+      logger.puppeteer('info', 'Network security monitor enabled');
+
+      // Use system-based user agent (rotating between recent Chrome versions, but matching real OS)
+      const userAgentVariations = SystemInfoDetector.getUserAgentVariations();
+      const selectedUA = userAgentVariations[Math.floor(Math.random() * userAgentVariations.length)];
+      await this.page.setUserAgent(selectedUA);
+      this.log('info', `Using system-matched UA: Chrome/${selectedUA.match(/Chrome\/([^ ]+)/)?.[1]}`);
+
+      // Enhanced anti-detection: Use REAL system properties for consistent fingerprint
+      await this.page.evaluateOnNewDocument((sysInfo) => {
+        // Spoof with REAL system values to avoid detection inconsistencies
+        Object.defineProperty(navigator, 'languages', {
+          get: () => sysInfo.languages
+        });
+
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+          get: () => sysInfo.cpuCores
+        });
+
+        Object.defineProperty(navigator, 'deviceMemory', {
+          get: () => sysInfo.deviceMemory
+        });
+
+        Object.defineProperty(navigator, 'platform', {
+          get: () => sysInfo.platform
+        });
+
+        Object.defineProperty(navigator, 'maxTouchPoints', {
+          get: () => 0 // Desktop has no touch support
+        });
+      }, systemInfo);
+
+      // Optionally inject Browse4Extract watermark on every page load
+      // Note: Watermark is disabled by default to reduce detection risk via DOM inspection
+      if (showWatermark) {
+        this.log('info', 'Watermark enabled (may increase detection risk)');
+        await this.page.evaluateOnNewDocument(() => {
+          // Wait for DOM to be ready
+          const injectWatermark = () => {
+            // Check if watermark already exists
+            if (document.getElementById('browse4extract-watermark')) {
+              return;
+            }
+
+            const watermark = document.createElement('div');
+            watermark.id = 'browse4extract-watermark';
+            watermark.textContent = 'Browse4Extract';
+            watermark.style.cssText = `
+              position: fixed;
+              bottom: 10px;
+              right: 10px;
+              background: linear-gradient(135deg, #6fbb69 0%, #bf8fd7 100%);
+              color: white;
+              padding: 5px 12px;
+              border-radius: 6px;
+              font-family: Arial, sans-serif;
+              font-size: 11px;
+              font-weight: bold;
+              z-index: 999997;
+              opacity: 0.7;
+              pointer-events: none;
+              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            `;
+
+            // Append to body when available
+            if (document.body) {
+              document.body.appendChild(watermark);
+            } else {
+              // If body not ready, wait for it
+              document.addEventListener('DOMContentLoaded', () => {
+                if (document.body && !document.getElementById('browse4extract-watermark')) {
+                  document.body.appendChild(watermark);
+                }
+              });
+            }
+          };
+
+          // Try to inject immediately
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', injectWatermark);
+          } else {
+            injectWatermark();
+          }
+        });
+      }
 
       this.log('success', 'Puppeteer initialized successfully with obstacle handling');
     } catch (error) {
@@ -89,38 +211,219 @@ export class Scraper {
    * Auto-scroll the entire page to load lazy-loaded content
    * @param scrollDelay Delay between scroll steps in ms
    */
-  private async autoScroll(scrollDelay: number = 300): Promise<void> {
+  /**
+   * Show auto-scroll banner (similar to ESC banner in element picker)
+   */
+  private async showAutoScrollBanner(): Promise<void> {
+    if (!this.page) return;
+
+    await this.page.evaluate(() => {
+      // Remove existing banner if present
+      const existing = document.getElementById('browse4extract-autoscroll-banner');
+      if (existing) {
+        existing.remove();
+      }
+
+      // Create banner
+      const banner = document.createElement('div');
+      banner.id = 'browse4extract-autoscroll-banner';
+      banner.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #6fbb69 0%, #bf8fd7 100%);
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+        z-index: 1000000;
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      `;
+      banner.textContent = '⏳ Loading all elements, please wait...';
+      document.body.appendChild(banner);
+    });
+  }
+
+  /**
+   * Remove auto-scroll banner
+   */
+  private async removeAutoScrollBanner(): Promise<void> {
+    if (!this.page) return;
+
+    await this.page.evaluate(() => {
+      const banner = document.getElementById('browse4extract-autoscroll-banner');
+      if (banner) {
+        banner.remove();
+      }
+    });
+  }
+
+  private async autoScroll(scrollDelay: number = SCROLL_DELAY_MS): Promise<void> {
     if (!this.page) {
       throw new Error('Page not initialized');
     }
 
     this.log('info', 'Auto-scrolling page to load lazy content...');
 
+    // Show banner before starting scroll
+    await this.showAutoScrollBanner();
+
     await this.page.evaluate(async (delay: number) => {
+      // Save initial scroll position and overflow state
+      const initialScrollX = window.scrollX;
+      const initialScrollY = window.scrollY;
+      const bodyOverflow = document.body.style.overflow;
+      const htmlOverflow = document.documentElement.style.overflow;
+
+      // SECURITY: Maximum scroll time to prevent infinite loops on infinite-scroll pages
+      const startTime = Date.now();
+
       await new Promise<void>((resolve) => {
         let totalHeight = 0;
-        const distance = 300; // Pixels to scroll each step
 
         const timer = setInterval(() => {
+          // Check timeout first
+          if (Date.now() - startTime > MAX_SCROLL_TIME_MS) {
+            clearInterval(timer);
+
+            // Restore original scroll position
+            window.scrollTo(initialScrollX, initialScrollY);
+
+            // Restore original overflow properties
+            document.body.style.overflow = bodyOverflow;
+            document.documentElement.style.overflow = htmlOverflow;
+
+            resolve();
+            return;
+          }
+
           const scrollHeight = document.body.scrollHeight;
-          window.scrollBy(0, distance);
-          totalHeight += distance;
+          window.scrollBy(0, SCROLL_DISTANCE_PX);
+          totalHeight += SCROLL_DISTANCE_PX;
 
           // Check if we've reached the bottom
           if (totalHeight >= scrollHeight - window.innerHeight) {
             clearInterval(timer);
-            // Scroll back to top
-            window.scrollTo(0, 0);
+
+            // Restore original scroll position
+            window.scrollTo(initialScrollX, initialScrollY);
+
+            // Restore original overflow properties
+            document.body.style.overflow = bodyOverflow;
+            document.documentElement.style.overflow = htmlOverflow;
+
             resolve();
           }
         }, delay);
       });
     }, scrollDelay);
 
-    this.log('success', 'Auto-scroll completed, all lazy content loaded');
+    // Remove banner after scroll completes
+    await this.removeAutoScrollBanner();
+
+    this.log('success', 'Auto-scroll completed, scroll state restored');
   }
 
-  async navigateToUrl(url: string, handleObstacles: boolean = true): Promise<void> {
+  /**
+   * Inject loading overlay with spinner and message
+   */
+  private async injectLoadingOverlay(message: string): Promise<void> {
+    if (!this.page) return;
+
+    await this.page.evaluate((msg: string) => {
+      // Remove existing overlay if present
+      const existing = document.getElementById('browse4extract-loading');
+      if (existing) existing.remove();
+
+      // Create overlay (using safe DOM manipulation instead of innerHTML)
+      const overlay = document.createElement('div');
+      overlay.id = 'browse4extract-loading';
+
+      const container = document.createElement('div');
+      container.className = 'spinner-container';
+
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+
+      const text = document.createElement('div');
+      text.className = 'loading-text';
+      text.textContent = msg; // Safe - textContent auto-escapes
+
+      container.appendChild(spinner);
+      container.appendChild(text);
+      overlay.appendChild(container);
+
+      // Styles CSS inline
+      overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.85); z-index: 999999;
+        display: flex; align-items: center; justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: wait;
+      `;
+
+      // Apply styles to created elements
+      container.style.cssText = 'text-align: center;';
+
+      spinner.style.cssText = `
+        width: 60px; height: 60px; margin: 0 auto 20px;
+        border: 4px solid rgba(111, 187, 105, 0.3);
+        border-top-color: #6fbb69; border-radius: 50%;
+        animation: browse4extract-spin 1s linear infinite;
+      `;
+
+      text.style.cssText = `
+        color: #ffffff; font-size: 16px; font-weight: 500;
+        margin-bottom: 10px;
+      `;
+
+      // Keyframes for animation
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes browse4extract-spin {
+          to { transform: rotate(360deg); }
+        }
+      `;
+
+      document.head.appendChild(style);
+      document.body.appendChild(overlay);
+    }, message);
+  }
+
+  /**
+   * Update loading overlay message
+   */
+  private async updateLoadingMessage(message: string): Promise<void> {
+    if (!this.page) return;
+
+    await this.page.evaluate((msg: string) => {
+      const text = document.querySelector('#browse4extract-loading .loading-text') as HTMLElement;
+      if (text) text.textContent = msg;
+    }, message);
+  }
+
+  /**
+   * Remove loading overlay with fade-out animation
+   */
+  private async removeLoadingOverlay(): Promise<void> {
+    if (!this.page) return;
+
+    await this.page.evaluate(() => {
+      const overlay = document.getElementById('browse4extract-loading');
+      if (overlay) {
+        overlay.style.transition = 'opacity 0.3s ease';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), OVERLAY_FADE_DURATION_MS);
+      }
+    });
+  }
+
+  async navigateToUrl(url: string, handleObstacles: boolean = true, skipAutoScroll: boolean = false): Promise<void> {
     if (!this.page) {
       throw new Error('Page not initialized');
     }
@@ -137,7 +440,7 @@ export class Scraper {
 
     try {
       this.log('info', `Navigating to ${url}...`);
-      await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await this.page.goto(url, { waitUntil: 'networkidle2', timeout: PAGE_NAVIGATION_TIMEOUT_MS });
       this.log('success', 'Page loaded successfully');
 
       // Handle obstacles (cookies, modals, ads) if enabled
@@ -156,14 +459,18 @@ export class Scraper {
         }
 
         // Wait a bit for the page to stabilize after obstacle handling
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, COOKIE_WAIT_MS));
       }
 
-      // Auto-scroll to load all lazy content
-      await this.autoScroll();
+      // Auto-scroll to load all lazy content (skip for element picker to improve performance)
+      if (!skipAutoScroll) {
+        await this.autoScroll();
 
-      // Wait for any final animations/loading
-      await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait for any final animations/loading
+        await new Promise(resolve => setTimeout(resolve, POST_SCROLL_WAIT_MS));
+      } else {
+        this.log('info', 'Skipping auto-scroll for faster element selection');
+      }
 
     } catch (error) {
       this.log('error', `Navigation error: ${error}`);
@@ -227,12 +534,37 @@ export class Scraper {
     }
   }
 
+  /**
+   * SECURITY: Validate CSS selector to prevent injection attacks
+   */
+  private validateSelector(selector: string): void {
+    // Check selector length (prevent DoS via extremely long selectors)
+    if (selector.length > MAX_SELECTOR_LENGTH) {
+      throw new Error('Selector too long (max 500 characters)');
+    }
+
+    // Check for dangerous patterns that could indicate injection attempts
+    if (selector.includes('<script') || selector.includes('javascript:')) {
+      throw new Error('Invalid selector: dangerous pattern detected');
+    }
+
+    // Basic CSS selector format validation (allow common selectors)
+    // This regex allows: IDs, classes, tags, attributes, combinators, pseudo-classes
+    const validSelectorPattern = /^[a-zA-Z0-9\s\-_#.\[\]="':>+~*(),^$|]+$/;
+    if (!validSelectorPattern.test(selector)) {
+      throw new Error('Invalid selector format: contains illegal characters');
+    }
+  }
+
   private async extractSingleValue(extractor: DataExtractor, index: number): Promise<string | null> {
     if (!this.page) {
       throw new Error('Page not initialized');
     }
 
     const { selector, extractorType, attributeName } = extractor;
+
+    // SECURITY: Validate selector before use
+    this.validateSelector(selector);
 
     switch (extractorType) {
       case 'text':
@@ -293,7 +625,7 @@ export class Scraper {
     return path.basename(fileName)
       .replace(/[<>:"|?*]/g, '_')
       .replace(/\.\./g, '_')
-      .substring(0, 255); // Limit filename length
+      .substring(0, MAX_FILENAME_LENGTH); // Limit filename length
   }
 
   private getOutputsPath(): string {
@@ -448,9 +780,34 @@ export class Scraper {
     }
   }
 
+  /**
+   * Get the current page instance (for session management)
+   */
+  getPage(): Page | null {
+    return this.page;
+  }
+
+  /**
+   * Get the current browser instance (for session management)
+   */
+  getBrowser(): Browser | null {
+    return this.browser;
+  }
+
   async scrape(config: ScrapingConfig): Promise<ScrapedData[]> {
     try {
       await this.initialize(config.debugMode);
+
+      // Load session if specified
+      if (config.sessionProfileId && this.sessionManager && this.page) {
+        this.log('info', `Loading session profile: ${config.sessionProfileId}...`);
+        const success = await this.sessionManager.applySessionToPage(this.page, config.sessionProfileId);
+        if (success) {
+          this.log('success', 'Session loaded successfully');
+        } else {
+          this.log('warning', 'Failed to load session, continuing without it');
+        }
+      }
 
       // Handle obstacles by default unless explicitly disabled
       const handleObstacles = config.handleObstacles !== false;
@@ -524,15 +881,118 @@ export class Scraper {
   /**
    * Opens Visual Element Picker to select an element interactively
    * @param url URL to navigate to
+   * @param sessionProfileId Optional session profile ID to load cookies/auth
    * @returns Selected element information including optimal selector
    */
-  async pickElement(url: string): Promise<any> {
+  async pickElement(url: string, sessionProfileId?: string): Promise<any> {
     try {
       this.log('info', 'Starting Visual Element Picker...');
 
       await this.initialize(true); // Always visible for picking
-      await this.navigateToUrl(url);
 
+      if (!this.page) {
+        throw new Error('Page not initialized');
+      }
+
+      // Load session if provided or try to find by domain
+      if (sessionProfileId && this.sessionManager) {
+        this.log('info', `Loading session profile: ${sessionProfileId}...`);
+        const success = await this.sessionManager.applySessionToPage(this.page, sessionProfileId);
+        if (success) {
+          this.log('success', 'Session loaded successfully for element picker');
+        } else {
+          this.log('warning', 'Failed to load session, continuing without authentication');
+        }
+      } else if (this.sessionManager) {
+        // Try to find session by domain
+        try {
+          const urlObj = new URL(url);
+          const domain = urlObj.hostname;
+          this.log('info', `Looking for session matching domain: ${domain}...`);
+          const session = await this.sessionManager.findSessionByDomain(domain);
+          if (session) {
+            this.log('info', `Found session "${session.name}" for domain, applying...`);
+            const success = await this.sessionManager.applySessionToPage(this.page, session.id);
+            if (success) {
+              this.log('success', 'Session auto-loaded by domain match');
+            }
+          } else {
+            this.log('info', 'No session found for this domain');
+          }
+        } catch (error) {
+          this.log('warning', `Could not auto-detect session: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Navigate to URL
+      this.log('info', `Navigating to ${url}...`);
+
+      // Validate URL (SECURITY: Prevent SSRF attacks)
+      try {
+        const urlObj = new URL(url);
+
+        // Only allow HTTP and HTTPS protocols
+        if (!['http:', 'https:'].includes(urlObj.protocol)) {
+          throw new Error('Only HTTP and HTTPS protocols are allowed');
+        }
+
+        // Block localhost and loopback IPs
+        const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+        if (blockedHosts.includes(urlObj.hostname.toLowerCase())) {
+          throw new Error('Cannot access localhost or internal networks');
+        }
+
+        // Block private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+        const ipMatch = urlObj.hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+        if (ipMatch) {
+          const [, a, b] = ipMatch.map(Number);
+          if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+            throw new Error('Cannot access private IP ranges');
+          }
+          // Block link-local addresses (169.254.x.x)
+          if (a === 169 && b === 254) {
+            throw new Error('Cannot access link-local addresses');
+          }
+        }
+      } catch (error) {
+        throw new Error(`Invalid URL format: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      await this.page.goto(url, { waitUntil: 'networkidle2', timeout: PAGE_NAVIGATION_TIMEOUT_MS });
+      this.log('success', 'Page loaded successfully');
+
+      // Inject loading overlay AFTER navigation
+      await this.injectLoadingOverlay('Handling cookies and popups...');
+
+      // Handle obstacles (cookies, modals, ads)
+      if (this.cookieHandler) {
+        this.log('info', 'Handling obstacles (cookies, popups, ads)...');
+        const result = await this.cookieHandler.handleAllObstacles();
+
+        if (result.success) {
+          if (result.dismissed > 0) {
+            this.log('success', `Successfully dismissed ${result.dismissed} obstacle(s)`);
+          } else {
+            this.log('info', 'No obstacles detected');
+          }
+        } else {
+          this.log('warning', 'Some obstacles could not be handled automatically');
+        }
+
+        // Wait for page to stabilize
+        await new Promise(resolve => setTimeout(resolve, COOKIE_WAIT_MS));
+      }
+
+      // Auto-scroll to load lazy content
+      await this.updateLoadingMessage('Loading lazy content...');
+      await this.autoScroll();
+      await new Promise(resolve => setTimeout(resolve, POST_SCROLL_WAIT_MS));
+
+      // Preparing picker
+      await this.updateLoadingMessage('Preparing element picker...');
+      await new Promise(resolve => setTimeout(resolve, PICKER_PREP_WAIT_MS));
+
+      // Overlay will be removed by ElementPicker just before showing picker UI
       const picker = new ElementPicker(this.page!);
       this.log('info', 'Visual Picker ready - click on an element to select it (ESC to cancel)');
 
@@ -551,7 +1011,14 @@ export class Scraper {
     } catch (error) {
       this.log('error', `Visual Picker error: ${error}`);
 
-      // Close browser on error too
+      // Remove overlay on error
+      try {
+        await this.removeLoadingOverlay();
+      } catch (e) {
+        // Ignore overlay removal errors
+      }
+
+      // Close browser on error
       await this.close();
 
       return {

@@ -48,7 +48,10 @@ module.exports = {
       patterns: [
         {
           from: 'assets',
-          to: 'assets'
+          to: 'assets',
+          globOptions: {
+            ignore: ['**/*.psd']
+          }
         }
       ]
     })

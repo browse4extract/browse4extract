@@ -67,25 +67,25 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                   {/* Save Profile */}
                   <button
                     onClick={onSave}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-medium rounded-lg transition-all transform hover:scale-[1.02]"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:from-[#8acc85] hover:to-[#d6c1e1] text-white font-medium rounded-lg transition-all transform hover:scale-[1.02] shadow-lg"
                   >
                     <Save size={18} />
-                    <span>Save Profile</span>
+                    <span>Save</span>
                   </button>
 
                   {/* Discard Changes */}
                   <button
                     onClick={onDiscard}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-all border border-red-500/30"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-900/30 hover:bg-red-900/50 text-red-300 hover:text-red-200 font-medium rounded-lg transition-all border border-red-700/50"
                   >
                     <Trash2 size={18} />
-                    <span>Discard Changes</span>
+                    <span>Don't Save</span>
                   </button>
 
                   {/* Cancel */}
                   <button
                     onClick={onClose}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-all border border-gray-600"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 text-gray-300 hover:text-gray-100 font-medium rounded-lg transition-all border border-gray-600"
                   >
                     <X size={18} />
                     <span>Cancel</span>
