@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Browse4Extract Logo](assets/app_image.png)
+<img src="assets/app_image.png" alt="Browse4Extract Logo" width="32" height="32">
 
 **A powerful Electron desktop application for extracting web data with visual element selection**
 
