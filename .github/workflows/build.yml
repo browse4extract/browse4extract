@@ -13,6 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false  # Continue all builds even if one fails
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
         node-version: [18.x]
