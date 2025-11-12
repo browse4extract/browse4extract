@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version de la release (ex: 1.0.0)'
+        description: 'Release version (e.g., 1.0.0)'
         required: true
         type: string
 
@@ -104,32 +104,42 @@ jobs:
     - name: Display structure of downloaded files
       run: ls -R artifacts/
 
+    - name: Extract changelog for version
+      id: changelog
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+
+        # Extract the changelog section for this version
+        # This captures everything from the version header until the next version header or end of file
+        CHANGELOG=$(awk -v ver="$VERSION" '
+          /^### \['"$VERSION"'\]/ { found=1; print; next }
+          found && /^### \[[0-9]/ { exit }
+          found && /^## [0-9]/ { exit }
+          found && /^# Changelog$/ { exit }
+          found { print }
+        ' CHANGELOG.md)
+
+        # If changelog is empty, provide a default message
+        if [ -z "$CHANGELOG" ]; then
+          CHANGELOG="See [CHANGELOG.md](https://github.com/browse4extract/browse4extract/blob/master/CHANGELOG.md) for release notes."
+        fi
+
+        # Save to output (handle multiline by using EOF delimiter)
+        echo "content<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.event.inputs.version }}
         name: Browse4Extract v${{ github.event.inputs.version }}
         body: |
-          ## Browse4Extract v${{ github.event.inputs.version }}
-
-          ### Téléchargements
-
-          #### Windows
-          - **Installateur**: `Browse4Extract-Setup-${{ github.event.inputs.version }}.exe`
-          - **Version portable (ZIP)**: `Browse4Extract-${{ github.event.inputs.version }}-win.zip`
-
-          #### macOS
-          - **DMG**: `Browse4Extract-${{ github.event.inputs.version }}.dmg`
-          - **Version portable (ZIP)**: `Browse4Extract-${{ github.event.inputs.version }}-mac.zip`
-
-          #### Linux
-          - **AppImage**: `Browse4Extract-${{ github.event.inputs.version }}.AppImage`
-          - **Archive (TAR.GZ)**: `Browse4Extract-${{ github.event.inputs.version }}-linux.tar.gz`
+          ${{ steps.changelog.outputs.content }}
 
           ---
 
-          ### Notes de version
-          Ajoutez vos notes de version ici.
+          Changelog at https://github.com/browse4extract/browse4extract/blob/master/CHANGELOG.md
         files: |
           artifacts/windows-artifacts/*
           artifacts/macos-artifacts/*
