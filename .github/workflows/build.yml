@@ -174,6 +174,10 @@ jobs:
               "portable": "$RELEASE_URL/Browse4Extract-$VERSION-win.zip"
             },
             "macos": {
+              "intel": {
+                "dmg": "$RELEASE_URL/Browse4Extract-$VERSION.dmg",
+                "zip": "$RELEASE_URL/Browse4Extract-$VERSION-mac.zip"
+              },
               "arm64": {
                 "dmg": "$RELEASE_URL/Browse4Extract-$VERSION-arm64.dmg",
                 "zip": "$RELEASE_URL/Browse4Extract-$VERSION-arm64-mac.zip"
@@ -423,7 +427,9 @@ jobs:
               </div>
               <div class="download-card">
                 <h3>macOS</h3>
+                <a href="#" class="download-btn" id="mac-intel-dmg">DMG (Intel)</a>
                 <a href="#" class="download-btn" id="mac-arm-dmg">DMG (Apple Silicon)</a>
+                <a href="#" class="download-btn secondary" id="mac-intel-zip">ZIP (Intel)</a>
                 <a href="#" class="download-btn secondary" id="mac-arm-zip">ZIP (Apple Silicon)</a>
               </div>
               <div class="download-card">
@@ -454,6 +460,8 @@ jobs:
                 document.getElementById('win-installer').href = data.downloadLinks.windows.installer;
                 document.getElementById('win-portable').href = data.downloadLinks.windows.portable;
 
+                document.getElementById('mac-intel-dmg').href = data.downloadLinks.macos.intel.dmg;
+                document.getElementById('mac-intel-zip').href = data.downloadLinks.macos.intel.zip;
                 document.getElementById('mac-arm-dmg').href = data.downloadLinks.macos.arm64.dmg;
                 document.getElementById('mac-arm-zip').href = data.downloadLinks.macos.arm64.zip;
 
