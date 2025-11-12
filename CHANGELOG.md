@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.1.1](https://github.com/browse4extract/browse4extract/compare/v1.1.0...v1.1.1) (2025-11-12)
+
+
+### Bug Fixes
+
+* security improvements - XSS prevention and SSRF protection ([3bf5f6a](https://github.com/browse4extract/browse4extract/commit/3bf5f6a4d3e2169b074f548460bc6452a2c68c90))
+
 ## 1.1.0 (2025-11-12)
 
 
