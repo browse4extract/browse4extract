@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.2.0](https://github.com/browse4extract/browse4extract/compare/v1.1.3...v1.2.0) (2025-11-12)
+
+
+### Features
+
+* add Intel macOS builds support ([ec027ed](https://github.com/browse4extract/browse4extract/commit/ec027ed6cadf9574b9d78008f397a1ddd5ea8890))
+* add macOS Intel (x64) builds using separate GitHub runners ([1c8b24b](https://github.com/browse4extract/browse4extract/commit/1c8b24b591dfda398bbc3c754b4ffdfbde9fced8))
+
+
+### Bug Fixes
+
+* update version API with correct download links and brand design ([78bfa84](https://github.com/browse4extract/browse4extract/commit/78bfa8465e737b7f3c59e5486e959fd8020c7832)), closes [#6fbb69](https://github.com/browse4extract/browse4extract/issues/6fbb69) [#bf8fd7](https://github.com/browse4extract/browse4extract/issues/bf8fd7)
+
 ### [1.1.3](https://github.com/browse4extract/browse4extract/compare/v1.1.1...v1.1.3) (2025-11-12)
 
 
