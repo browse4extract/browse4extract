@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.1.3](https://github.com/browse4extract/browse4extract/compare/v1.1.1...v1.1.3) (2025-11-12)
+
+
+### Bug Fixes
+
+* extension files creation ([a20a679](https://github.com/browse4extract/browse4extract/commit/a20a67901d1f526c0a83490dcb61b2e7a263d1ab))
+* include package-lock.json for reproducible builds and fix CI ([38985af](https://github.com/browse4extract/browse4extract/commit/38985af1c5ef3712b1f95ae7e092a8b378eb3d77))
+
+
+### Documentation
+
+* add comprehensive documentation system ([91baec5](https://github.com/browse4extract/browse4extract/commit/91baec5bc9f8bdc56413c97b084380b7394a1fb0))
+* update security documentation with all fixes ([e104326](https://github.com/browse4extract/browse4extract/commit/e104326bd91d719ce66ab7c009e81a4b2e2bed68))
+
+
+### Chores
+
+* **release:** 1.1.2 ([a1bff9a](https://github.com/browse4extract/browse4extract/commit/a1bff9a9bab1f4bfafe689252b292b4be2f222b3))
+
 ### [1.1.2](https://github.com/browse4extract/browse4extract/compare/v1.1.1...v1.1.2) (2025-11-12)
 
 
