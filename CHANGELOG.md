@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.1.2](https://github.com/browse4extract/browse4extract/compare/v1.1.1...v1.1.2) (2025-11-12)
+
+
+### Security Improvements
+
+* **renderer sandboxing:** enable sandbox mode for enhanced process isolation ([f7431b0](https://github.com/browse4extract/browse4extract/commit/f7431b0))
+* **ipc rate limiting:** implement comprehensive sliding window rate limiter for all IPC operations ([f7431b0](https://github.com/browse4extract/browse4extract/commit/f7431b0))
+* **file validation:** add dangerous file extension blacklist for profile loading ([f7431b0](https://github.com/browse4extract/browse4extract/commit/f7431b0))
+* **session expiry:** automatic detection and filtering of expired session cookies ([f7431b0](https://github.com/browse4extract/browse4extract/commit/f7431b0))
+* **security audit:** all medium and low priority recommendations implemented ([f7431b0](https://github.com/browse4extract/browse4extract/commit/f7431b0))
+
+**Security Rating Upgraded: B+ → A (Excellent)**
+
+### Documentation
+
+* add comprehensive documentation system with architecture, security, and development guides ([91baec5](https://github.com/browse4extract/browse4extract/commit/91baec5bc9f8bdc56413c97b084380b7394a1fb0))
+* update security documentation with all fixes and new enhancements ([e104326](https://github.com/browse4extract/browse4extract/commit/e104326bd91d719ce66ab7c009e81a4b2e2bed68))
+
 ### [1.1.1](https://github.com/browse4extract/browse4extract/compare/v1.1.0...v1.1.1) (2025-11-12)
 
 
