@@ -321,16 +321,21 @@ ipcMain.handle('start-scraping', async (_event, config: ScrapingConfig) => {
 
     // Generate default filename if needed
     let fileName = config.fileName.trim();
+    const format = config.exportFormat || 'json';
+    const extension = format === 'excel' ? '.xlsx' : format === 'csv' ? '.csv' : '.json';
+
     if (!fileName) {
       const url = new URL(config.url);
       const domain = url.hostname.replace(/^www\./, '');
       const timestamp = Date.now();
-      fileName = `${domain}-${timestamp}.json`;
+      fileName = `${domain}-${timestamp}${extension}`;
     }
 
-    // Ensure filename has proper extension
-    if (!fileName.endsWith('.json')) {
-      fileName += '.json';
+    // Ensure filename has proper extension for the selected format
+    if (!fileName.endsWith(extension)) {
+      // Remove any existing extension
+      fileName = fileName.replace(/\.(json|csv|xlsx)$/i, '');
+      fileName += extension;
     }
 
     const finalConfig = { ...config, fileName };
