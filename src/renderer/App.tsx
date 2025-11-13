@@ -795,6 +795,11 @@ function App() {
     setSessionRefreshTrigger(prev => prev + 1);
   };
 
+  const handleSessionDeleted = () => {
+    // Trigger refresh of SessionSelector after deletion
+    setSessionRefreshTrigger(prev => prev + 1);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-gray-100">
       {/* Custom Title Bar */}
@@ -1578,7 +1583,10 @@ function App() {
                     </div>
                   </div>
 
-                  <SessionManager onSessionCreated={handleSessionCreated} />
+                  <SessionManager
+                    onSessionCreated={handleSessionCreated}
+                    onSessionDeleted={handleSessionDeleted}
+                  />
                 </div>
 
                 {/* Fixed footer with close button */}

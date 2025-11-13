@@ -7,9 +7,10 @@ import { useToast } from './ToastNotification';
 
 interface SessionManagerProps {
   onSessionCreated?: (sessionId: string) => void;
+  onSessionDeleted?: () => void;
 }
 
-const SessionManager: React.FC<SessionManagerProps> = ({ onSessionCreated }) => {
+const SessionManager: React.FC<SessionManagerProps> = ({ onSessionCreated, onSessionDeleted }) => {
   const [sessions, setSessions] = useState<SessionProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [testingSessionId, setTestingSessionId] = useState<string | null>(null);
@@ -77,6 +78,10 @@ const SessionManager: React.FC<SessionManagerProps> = ({ onSessionCreated }) => 
           return newResults;
         });
         showToast(`Session "${sessionToDelete.name}" deleted successfully`, 'success');
+        // Notify parent component to refresh SessionSelector
+        if (onSessionDeleted) {
+          onSessionDeleted();
+        }
       } else {
         showToast(`Failed to delete session: ${result.error}`, 'error');
       }

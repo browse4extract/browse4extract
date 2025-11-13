@@ -230,11 +230,11 @@ async function handleUpdateProcess(): Promise<boolean> {
   } catch (error) {
     logger.error('electron', `[Update] Error during update process: ${error}`);
 
-    // En cas d'erreur, afficher un message et permettre le lancement
+    // In case of error, display message and allow launch
     updateLauncher.setError(
       currentVersion,
       'FETCH_FAILED',
-      'Une erreur est survenue lors de la mise à jour. Vous pouvez lancer l\'application quand même.'
+      'An error occurred during the update. You can launch the application anyway.'
     );
 
     return new Promise((resolve) => {
