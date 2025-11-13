@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/browse4extract/browse4extract/compare/v1.3.0...v1.4.0) (2025-11-13)
+
+
+### Features
+
+* add changelog viewer with markdown rendering ([a59fb3d](https://github.com/browse4extract/browse4extract/commit/a59fb3d0ef08e0cad409af9e3d0054f509d8731b))
+* redesign update window with consistent app styling and fix version display ([bb5e539](https://github.com/browse4extract/browse4extract/commit/bb5e539a65ab31838dd13ab4fcc73e116cee8ca4)), closes [#6fbb69](https://github.com/browse4extract/browse4extract/issues/6fbb69) [#bf8fd7](https://github.com/browse4extract/browse4extract/issues/bf8fd7) [#000000](https://github.com/browse4extract/browse4extract/issues/000000) [#0a0a0](https://github.com/browse4extract/browse4extract/issues/0a0a0) [#1a1a1](https://github.com/browse4extract/browse4extract/issues/1a1a1)
+
+
+### Bug Fixes
+
+* adapt updater to match existing version.json structure ([e54f141](https://github.com/browse4extract/browse4extract/commit/e54f141160894ccb0feeb0e05782128c98c4c035))
+* resolve black screen after updater by adding window close delay ([696ef9d](https://github.com/browse4extract/browse4extract/commit/696ef9d9de198737ac6ad7af8871448bbae04020))
+* resolve deleted sessions persisting in dropdown and translate error message ([0703cec](https://github.com/browse4extract/browse4extract/commit/0703cecf1efe166e843fca546136e171f1b6407d))
+* resolve macOS update flow and add security improvements ([694fc9f](https://github.com/browse4extract/browse4extract/commit/694fc9f7c0090e9aa98cf70f8c455bdc75186f59))
+
+
+### Chores
+
+* **release:** bump version to 1.3.1 ([ca655cd](https://github.com/browse4extract/browse4extract/commit/ca655cd5690856686b0111ad3ab49d9e41c853ea))
+* **release:** bump version to 1.3.2 ([1b8d2e7](https://github.com/browse4extract/browse4extract/commit/1b8d2e72a8588dba94ae6280ad321c8721c9c459))
+
 ## [1.3.0](https://github.com/browse4extract/browse4extract/compare/v1.2.0...v1.3.0) (2025-11-13)
 
 
