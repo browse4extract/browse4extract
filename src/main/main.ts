@@ -134,18 +134,21 @@ function getIconPath(): string {
 
 
 /**
- * Gère le processus de vérification et d'installation des mises à jour
- * @returns true si l'application doit continuer, false si elle redémarre pour mise à jour
+ * Handle the update check and installation process
+ * @returns true if the application should continue, false if it restarts for update
  */
 async function handleUpdateProcess(): Promise<boolean> {
-  // Créer la fenêtre launcher
+  logger.info('electron', '[Update] Starting update process...');
+
+  // Create the launcher window
   updateLauncher = new UpdateLauncherWindow();
   updateLauncher.createWindow();
 
   const currentVersion = app.getVersion();
+  logger.info('electron', `[Update] Current version: ${currentVersion}`);
   updateLauncher.setChecking(currentVersion);
 
-  // Créer l'update checker
+  // Create the update checker
   const updateChecker = new UpdateChecker({
     versionUrl: 'https://browse4extract.github.io/browse4extract/version.json',
     timeout: 10000,
@@ -153,23 +156,25 @@ async function handleUpdateProcess(): Promise<boolean> {
   });
 
   try {
-    // Vérifier les mises à jour
+    // Check for updates
+    logger.info('electron', '[Update] Checking for updates...');
     const checkResult = await updateChecker.checkForUpdates();
 
     if (checkResult.error) {
-      // Erreur rencontrée (pas de connexion internet, etc.)
+      // Error encountered (no internet connection, etc.)
+      logger.warning('electron', `[Update] Error checking for updates: ${checkResult.error}`);
       const errorMessage = getErrorMessage(checkResult.error);
       updateLauncher.setError(currentVersion, checkResult.error, errorMessage);
 
-      // Attendre que l'utilisateur choisisse (retry ou launch anyway)
+      // Wait for user choice (retry or launch anyway)
       return new Promise((resolve) => {
-        // L'utilisateur va cliquer sur un des boutons
-        // qui déclenchera les IPC handlers ci-dessous
+        // The user will click on one of the buttons
+        // which will trigger the IPC handlers below
         const retryHandler = async () => {
           ipcMain.removeListener('update-launcher:retry', retryHandler);
           ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
-          // Réessayer la vérification
+          // Retry checking
           updateLauncher?.close();
           const shouldContinue = await handleUpdateProcess();
           resolve(shouldContinue);
@@ -179,7 +184,7 @@ async function handleUpdateProcess(): Promise<boolean> {
           ipcMain.removeListener('update-launcher:retry', retryHandler);
           ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
-          // Lancer l'app quand même
+          // Launch app anyway
           updateLauncher?.close();
           // Wait for update window to fully close before continuing
           await new Promise((r) => setTimeout(r, 300));
@@ -192,20 +197,22 @@ async function handleUpdateProcess(): Promise<boolean> {
     }
 
     if (!checkResult.available || !checkResult.remoteVersion) {
-      // Pas de mise à jour disponible, continuer
+      // No update available, continue
+      logger.info('electron', '[Update] No update available, launching app...');
       updateLauncher.setReady(currentVersion);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Afficher brièvement "Tout est à jour"
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Briefly display "Up to date"
       updateLauncher.close();
       // Wait for update window to fully close before continuing
       await new Promise((resolve) => setTimeout(resolve, 300));
+      logger.info('electron', '[Update] Update window closed, returning true to launch main window');
       return true;
     }
 
-    // Mise à jour disponible
+    // Update available
     updateLauncher.setUpdateAvailable(currentVersion, checkResult.remoteVersion);
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // Laisser le temps de voir le changelog
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Let user see the changelog
 
-    // Télécharger et installer
+    // Download and install
     updateLauncher.setDownloading(
       currentVersion,
       checkResult.remoteVersion.version,
@@ -226,12 +233,12 @@ async function handleUpdateProcess(): Promise<boolean> {
     );
 
     if (installResult.requiresRestart) {
-      // Windows/Linux: Installation automatique, l'app va redémarrer
+      // Windows/Linux: Automatic installation, app will restart
       updateLauncher.setInstalling(currentVersion, checkResult.remoteVersion.version);
-      // L'application va redémarrer via app.relaunch() dans updateChecker
+      // The application will restart via app.relaunch() in updateChecker
       return false;
     } else {
-      // macOS: Installation manuelle requise, lancer l'app
+      // macOS: Manual installation required, launch app
       updateLauncher.setReady(currentVersion);
       await new Promise((resolve) => setTimeout(resolve, 2000));
       updateLauncher.close();
@@ -409,11 +416,11 @@ app.whenReady().then(async () => {
   // Initialize Session Manager
   sessionManager = new SessionManager();
 
-  // Gérer le processus de mise à jour avant de lancer l'application
+  // Handle the update process before launching the application
   const shouldContinue = await handleUpdateProcess();
 
   if (shouldContinue) {
-    // Pas de mise à jour ou l'utilisateur a choisi de lancer quand même
+    // No update or user chose to launch anyway
     createWindow();
 
     // Open debug window if enabled
@@ -421,8 +428,8 @@ app.whenReady().then(async () => {
       createDebugWindow();
     }
   } else {
-    // L'application va redémarrer pour appliquer la mise à jour
-    // On ne fait rien de plus
+    // The application will restart to apply the update
+    // We do nothing more
     logger.info('electron', '[Update] Application will restart to apply update');
   }
 
@@ -548,7 +555,7 @@ ipcMain.handle('preview-selector', async (_event, url: string, selector: string,
   }
 });
 
-// Handler pour le Visual Element Picker
+// Handler for the Visual Element Picker
 ipcMain.handle('pick-element', async (_event, url: string, sessionProfileId?: string) => {
   try {
     // SECURITY: Rate limiting (prevent abuse)

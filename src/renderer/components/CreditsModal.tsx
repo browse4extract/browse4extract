@@ -11,7 +11,7 @@ interface CreditsModalProps {
   onClose: () => void;
 }
 
-// Type pour une dépendance
+// Type for a dependency
 interface Dependency {
   name: string;
   displayName: string;
@@ -20,7 +20,7 @@ interface Dependency {
   license: string;
 }
 
-// Type pour un outil B4E custom
+// Type for a custom B4E tool
 interface B4ETool {
   name: string;
   displayName: string;
@@ -30,7 +30,7 @@ interface B4ETool {
 
 const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
   const [showChangelog, setShowChangelog] = useState(false);
-  // Fonction helper pour extraire la version sans le préfixe ^
+  // Helper function to extract version without the ^ prefix
   const getVersion = (pkg: string, isDev = false): string => {
     const deps: Record<string, string> = isDev
       ? (packageJson.devDependencies as Record<string, string>)
@@ -110,7 +110,7 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
     }
   ];
 
-  // Outils de support
+  // Support tools
   const supportTools: Dependency[] = [
     {
       name: 'discord-rpc',
@@ -182,14 +182,14 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
     }
   ];
 
-  // Grouper les licences
+  // Group licenses
   const licenseGroups = {
     MIT: [...coreTechnologies, ...uiLibraries, ...supportTools].filter(dep => dep.license === 'MIT'),
     'Apache-2.0': [...coreTechnologies, ...uiLibraries, ...supportTools].filter(dep => dep.license === 'Apache-2.0'),
     ISC: [...coreTechnologies, ...uiLibraries, ...supportTools].filter(dep => dep.license === 'ISC')
   };
 
-  // Composant pour afficher une carte de dépendance
+  // Component to display a dependency card
   const DependencyCard: React.FC<{ dep: Dependency }> = ({ dep }) => (
     <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-3 hover:border-gray-700 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1">
@@ -202,7 +202,7 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
     </div>
   );
 
-  // Composant pour afficher un outil B4E
+  // Component to display a B4E tool
   const B4EToolCard: React.FC<{ tool: B4ETool }> = ({ tool }) => (
     <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-3 hover:border-gray-700 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1">

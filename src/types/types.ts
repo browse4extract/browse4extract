@@ -148,7 +148,7 @@ export interface ElectronAPI {
   launchAppAnyway: () => void;
 }
 
-// Extension du Window pour TypeScript
+// Window extension for TypeScript
 declare global {
   interface Window {
     electronAPI: ElectronAPI;

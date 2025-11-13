@@ -14,7 +14,7 @@ import type {
 } from '../types/update';
 
 /**
- * Gestionnaire de vérification et installation des mises à jour
+ * Update check and installation manager
  */
 export class UpdateChecker {
   private versionUrl: string;
@@ -22,7 +22,7 @@ export class UpdateChecker {
 
   constructor(options: UpdateCheckerOptions) {
     this.versionUrl = options.versionUrl;
-    this.timeout = options.timeout || 10000; // 10 secondes par défaut
+    this.timeout = options.timeout || 10000; // 10 seconds by default
   }
 
   /**
@@ -65,7 +65,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Récupère les informations de version depuis l'URL distante
+   * Fetch version information from remote URL
    */
   private async fetchRemoteVersion(): Promise<RemoteVersionInfo> {
     return new Promise((resolve, reject) => {
@@ -177,13 +177,13 @@ export class UpdateChecker {
       if (remote[i] < current[i]) return false;
     }
 
-    return false; // Versions identiques
+    return false; // Identical versions
   }
 
   /**
-   * Télécharge et installe la mise à jour
-   * @param remoteVersion Informations de la version distante
-   * @param onProgress Callback appelé pour suivre la progression
+   * Download and install the update
+   * @param remoteVersion Remote version information
+   * @param onProgress Callback called to track progress
    * @returns Object indicating if automatic restart is required
    */
   async downloadAndInstall(
@@ -236,7 +236,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Obtient les informations de la plateforme actuelle
+   * Get current platform information
    */
   private getPlatformInfo(): PlatformInfo {
     const platform = process.platform as 'win32' | 'darwin' | 'linux';
@@ -248,15 +248,15 @@ export class UpdateChecker {
     switch (platform) {
       case 'win32':
         platformName = 'windows';
-        installerType = 'installer'; // Préférer l'installer NSIS
+        installerType = 'installer'; // Prefer NSIS installer
         break;
       case 'darwin':
         platformName = 'macOS';
-        installerType = 'dmg'; // Préférer DMG
+        installerType = 'dmg'; // Prefer DMG
         break;
       case 'linux':
         platformName = 'linux';
-        installerType = 'appImage'; // Préférer AppImage
+        installerType = 'appImage'; // Prefer AppImage
         break;
       default:
         throw new Error(`Unsupported platform: ${platform}`);
@@ -266,7 +266,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Obtient l'URL de téléchargement appropriée pour la plateforme
+   * Get appropriate download URL for platform
    */
   private getDownloadUrl(
     remoteVersion: RemoteVersionInfo,
@@ -374,7 +374,7 @@ export class UpdateChecker {
             return;
           }
 
-          const elapsed = (Date.now() - startTime) / 1000; // secondes
+          const elapsed = (Date.now() - startTime) / 1000; // seconds
           const speed = elapsed > 0 ? downloadedBytes / elapsed : 0;
           const percent =
             totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0;
@@ -418,7 +418,7 @@ export class UpdateChecker {
 
       request.on('error', (error) => {
         file.close();
-        fs.unlink(filePath, () => {}); // Nettoyer le fichier partiel
+        fs.unlink(filePath, () => {}); // Clean up partial file
         reject(error);
       });
 
@@ -431,7 +431,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Installe la mise à jour selon la plateforme
+   * Install update according to platform
    */
   private async installUpdate(
     installerPath: string,
@@ -455,20 +455,20 @@ export class UpdateChecker {
   }
 
   /**
-   * Installation Windows (NSIS)
+   * Windows installation (NSIS)
    */
   private async installWindows(installerPath: string): Promise<void> {
-    // Lancer l'installeur en mode silencieux
-    // /S = silent, /D= répertoire d'installation
+    // Launch installer in silent mode
+    // /S = silent, /D= installation directory
     const installDir = path.dirname(app.getPath('exe'));
 
     try {
-      // Exécuter l'installeur
+      // Execute the installer
       execFile(installerPath, ['/S', `/D=${installDir}`], (error) => {
         if (error) {
           console.error('Installation error:', error);
         }
-        // Après l'installation, redémarrer l'application
+        // After installation, restart the application
         app.relaunch();
         app.exit(0);
       });
@@ -478,45 +478,45 @@ export class UpdateChecker {
   }
 
   /**
-   * Installation macOS (DMG)
+   * macOS installation (DMG)
    */
   private async installMacOS(installerPath: string): Promise<void> {
-    // Sur macOS, on peut monter le DMG et copier l'app
-    // Pour simplifier, on demande à l'utilisateur de le faire manuellement
-    // ou utiliser electron-updater pour une gestion automatique
+    // On macOS, we can mount the DMG and copy the app
+    // For simplicity, we ask the user to do it manually
+    // or use electron-updater for automatic management
 
-    // Option 1: Ouvrir le DMG pour que l'utilisateur installe
+    // Option 1: Open the DMG for user installation
     execFile('open', [installerPath], (error) => {
       if (error) {
         console.error('Failed to open DMG:', error);
       }
     });
 
-    // Note: Pour une installation complètement automatique sur macOS,
-    // il faudrait implémenter le montage du DMG et la copie de l'app
+    // Note: For a completely automatic installation on macOS,
+    // would need to implement DMG mounting and app copying
   }
 
   /**
-   * Installation Linux (AppImage)
+   * Linux installation (AppImage)
    */
   private async installLinux(installerPath: string): Promise<void> {
-    // Remplacer l'AppImage actuel par le nouveau
+    // Replace current AppImage with new one
     const currentPath = app.getPath('exe');
     const backupPath = `${currentPath}.backup`;
 
     try {
-      // Backup de l'ancien
+      // Backup the old one
       fs.copyFileSync(currentPath, backupPath);
 
-      // Remplacer par le nouveau
+      // Replace with new one
       fs.copyFileSync(installerPath, currentPath);
-      fs.chmodSync(currentPath, '755'); // Rendre exécutable
+      fs.chmodSync(currentPath, '755'); // Make executable
 
-      // Redémarrer
+      // Restart
       app.relaunch();
       app.exit(0);
     } catch (error) {
-      // Restaurer le backup en cas d'erreur
+      // Restore backup on error
       if (fs.existsSync(backupPath)) {
         fs.copyFileSync(backupPath, currentPath);
       }
@@ -525,7 +525,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Détermine l'extension du fichier depuis l'URL avec validation stricte
+   * Determine file extension from URL with strict validation
    * Security: Use strict regex to prevent path traversal
    */
   private getFileExtension(url: string): string {
@@ -545,7 +545,7 @@ export class UpdateChecker {
   }
 
   /**
-   * Catégorise une erreur en type d'erreur de mise à jour
+   * Categorize an error into update error type
    */
   private categorizeError(error: any): UpdateError {
     const message = error?.message?.toLowerCase() || '';
