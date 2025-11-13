@@ -142,6 +142,10 @@ export interface ElectronAPI {
   deleteSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
   testSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
   saveCurrentSession: (sessionId: string, name: string, domain: string, loginUrl?: string) => Promise<SessionCreationResult>;
+  // Update launcher management
+  onUpdateLauncherState: (callback: (data: any) => void) => (() => void);
+  retryUpdateCheck: () => void;
+  launchAppAnyway: () => void;
 }
 
 // Extension du Window pour TypeScript

@@ -5,7 +5,8 @@ const webpack = require('webpack');
 module.exports = {
   entry: {
     main: './src/renderer/index.tsx',
-    debug: './src/renderer/debug.tsx'
+    debug: './src/renderer/debug.tsx',
+    updateLauncher: './src/renderer/updateLauncher.index.tsx'
   },
   target: 'electron-renderer',
   module: {
@@ -44,6 +45,11 @@ module.exports = {
       chunks: ['debug'],
       inject: 'body',
       scriptLoading: 'blocking'
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/renderer/update-launcher.html',
+      filename: 'update-launcher.html',
+      chunks: ['updateLauncher']
     }),
     new webpack.DefinePlugin({
       BUILD_DATE: JSON.stringify(new Date().toISOString().split('T')[0]),

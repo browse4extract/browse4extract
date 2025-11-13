@@ -224,5 +224,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   saveCurrentSession: async (sessionId: string, name: string, domain: string, loginUrl?: string): Promise<SessionCreationResult> => {
     return await ipcRenderer.invoke('save-current-session', sessionId, name, domain, loginUrl);
+  },
+
+  // Update launcher management
+  onUpdateLauncherState: (callback: (data: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('update-launcher:state', listener);
+    // Return cleanup function
+    return () => ipcRenderer.removeListener('update-launcher:state', listener);
+  },
+
+  retryUpdateCheck: (): void => {
+    ipcRenderer.send('update-launcher:retry');
+  },
+
+  launchAppAnyway: (): void => {
+    ipcRenderer.send('update-launcher:launch-anyway');
   }
 });

@@ -143,10 +143,9 @@ jobs:
         # Extract the changelog section for this version
         # This captures everything from the version header until the next version header or end of file
         CHANGELOG=$(awk -v ver="$VERSION" '
-          /^### \['"$VERSION"'\]/ { found=1; print; next }
-          found && /^### \[[0-9]/ { exit }
-          found && /^## [0-9]/ { exit }
-          found && /^# Changelog$/ { exit }
+          /^## \['"$VERSION"'\]/ { found=1; print; next }
+          found && /^## \[[0-9]/ { exit }
+          found && /^# / { exit }
           found { print }
         ' CHANGELOG.md)
 
@@ -220,6 +219,42 @@ jobs:
               "tarball": "$RELEASE_URL/browse4extract-$VERSION.tar.gz"
             }
           }
+        }
+        EOF
+
+        # Generate changelog.json
+        # Extract changelog content (skip the version header line)
+        CHANGELOG_CONTENT=$(echo "${{ steps.changelog.outputs.content }}" | tail -n +2)
+
+        # Convert changelog to JSON array of changes
+        # Extract bullet points from Features and Bug Fixes sections
+        CHANGES_JSON=$(echo "$CHANGELOG_CONTENT" | awk '
+          /^### Features/ || /^### Bug Fixes/ { section=1; next }
+          section && /^\* / {
+            gsub(/^\* /, "");
+            gsub(/"/, "\\\"");
+            gsub(/\[[a-f0-9]+\]\([^)]+\)/, "");  # Remove commit hash links
+            gsub(/\s+$/, "");  # Trim trailing whitespace
+            if (length($0) > 0) {
+              print "\"" $0 "\","
+            }
+          }
+          /^### / && !/^### Features/ && !/^### Bug Fixes/ { section=0 }
+        ' | sed '$ s/,$//')  # Remove trailing comma from last item
+
+        # If no changes found, use a default message
+        if [ -z "$CHANGES_JSON" ]; then
+          CHANGES_JSON='"No detailed changelog available. See release notes on GitHub."'
+        fi
+
+        cat > gh-pages-deploy/changelog.json <<EOF
+        {
+          "version": "$VERSION",
+          "releaseDate": "$BUILD_DATE",
+          "changes": [
+            $CHANGES_JSON
+          ],
+          "releaseUrl": "$REPO_URL/releases/tag/v$VERSION"
         }
         EOF
 

@@ -6,6 +6,8 @@ import { Scraper } from './scraper';
 import { ConfigManager } from './configManager';
 import { DiscordRpcService } from './discordRpc';
 import { SessionManager } from './sessionManager';
+import { UpdateChecker } from './updateChecker';
+import { UpdateLauncherWindow, getErrorMessage } from './updateLauncher';
 import { ScrapingConfig, LogMessage, ScrapedData, ExtractorType, AdvancedLogMessage, SessionProfile, SessionCreationResult } from '../types/types';
 import { logger } from './Logger';
 
@@ -15,6 +17,7 @@ let scraper: Scraper | null = null;
 let configManager: ConfigManager | null = null;
 let discordRpc: DiscordRpcService | null = null;
 let sessionManager: SessionManager | null = null;
+let updateLauncher: UpdateLauncherWindow | null = null;
 let hasUnsavedChanges: boolean = false;
 
 // SECURITY: Rate limiting for IPC operations
@@ -129,6 +132,134 @@ function getIconPath(): string {
   return path.join(process.resourcesPath, 'assets', iconFile);
 }
 
+
+/**
+ * Gère le processus de vérification et d'installation des mises à jour
+ * @returns true si l'application doit continuer, false si elle redémarre pour mise à jour
+ */
+async function handleUpdateProcess(): Promise<boolean> {
+  // Créer la fenêtre launcher
+  updateLauncher = new UpdateLauncherWindow();
+  updateLauncher.createWindow();
+
+  const currentVersion = app.getVersion();
+  updateLauncher.setChecking(currentVersion);
+
+  // Créer l'update checker
+  const updateChecker = new UpdateChecker({
+    versionUrl: 'https://browse4extract.github.io/browse4extract/version.json',
+    timeout: 10000,
+    autoDownload: true,
+  });
+
+  try {
+    // Vérifier les mises à jour
+    const checkResult = await updateChecker.checkForUpdates();
+
+    if (checkResult.error) {
+      // Erreur rencontrée (pas de connexion internet, etc.)
+      const errorMessage = getErrorMessage(checkResult.error);
+      updateLauncher.setError(currentVersion, checkResult.error, errorMessage);
+
+      // Attendre que l'utilisateur choisisse (retry ou launch anyway)
+      return new Promise((resolve) => {
+        // L'utilisateur va cliquer sur un des boutons
+        // qui déclenchera les IPC handlers ci-dessous
+        const retryHandler = async () => {
+          ipcMain.removeListener('update-launcher:retry', retryHandler);
+          ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+          // Réessayer la vérification
+          updateLauncher?.close();
+          const shouldContinue = await handleUpdateProcess();
+          resolve(shouldContinue);
+        };
+
+        const launchHandler = () => {
+          ipcMain.removeListener('update-launcher:retry', retryHandler);
+          ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+          // Lancer l'app quand même
+          updateLauncher?.close();
+          resolve(true);
+        };
+
+        ipcMain.once('update-launcher:retry', retryHandler);
+        ipcMain.once('update-launcher:launch-anyway', launchHandler);
+      });
+    }
+
+    if (!checkResult.available || !checkResult.remoteVersion) {
+      // Pas de mise à jour disponible, continuer
+      updateLauncher.setReady(currentVersion);
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Afficher brièvement "Tout est à jour"
+      updateLauncher.close();
+      return true;
+    }
+
+    // Mise à jour disponible
+    updateLauncher.setUpdateAvailable(currentVersion, checkResult.remoteVersion);
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Laisser le temps de voir le changelog
+
+    // Télécharger et installer
+    updateLauncher.setDownloading(
+      currentVersion,
+      checkResult.remoteVersion.version,
+      { percent: 0, transferred: 0, total: 0, speed: 0 }
+    );
+
+    await updateChecker.downloadAndInstall(
+      checkResult.remoteVersion,
+      (progress) => {
+        if (updateLauncher) {
+          updateLauncher.setDownloading(
+            currentVersion,
+            checkResult.remoteVersion!.version,
+            progress
+          );
+        }
+      }
+    );
+
+    // Installation en cours (l'app va redémarrer automatiquement)
+    updateLauncher.setInstalling(currentVersion, checkResult.remoteVersion.version);
+
+    // L'application va redémarrer via app.relaunch() dans updateChecker
+    // Donc on retourne false pour indiquer qu'on ne doit pas continuer
+    return false;
+  } catch (error) {
+    logger.error('electron', `[Update] Error during update process: ${error}`);
+
+    // En cas d'erreur, afficher un message et permettre le lancement
+    updateLauncher.setError(
+      currentVersion,
+      'FETCH_FAILED',
+      'Une erreur est survenue lors de la mise à jour. Vous pouvez lancer l\'application quand même.'
+    );
+
+    return new Promise((resolve) => {
+      const retryHandler = async () => {
+        ipcMain.removeListener('update-launcher:retry', retryHandler);
+        ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+        updateLauncher?.close();
+        const shouldContinue = await handleUpdateProcess();
+        resolve(shouldContinue);
+      };
+
+      const launchHandler = () => {
+        ipcMain.removeListener('update-launcher:retry', retryHandler);
+        ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+        updateLauncher?.close();
+        resolve(true);
+      };
+
+      ipcMain.once('update-launcher:retry', retryHandler);
+      ipcMain.once('update-launcher:launch-anyway', launchHandler);
+    });
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -263,11 +394,21 @@ app.whenReady().then(async () => {
   // Initialize Session Manager
   sessionManager = new SessionManager();
 
-  createWindow();
+  // Gérer le processus de mise à jour avant de lancer l'application
+  const shouldContinue = await handleUpdateProcess();
 
-  // Open debug window if enabled
-  if (debugSettings.advancedLogs) {
-    createDebugWindow();
+  if (shouldContinue) {
+    // Pas de mise à jour ou l'utilisateur a choisi de lancer quand même
+    createWindow();
+
+    // Open debug window if enabled
+    if (debugSettings.advancedLogs) {
+      createDebugWindow();
+    }
+  } else {
+    // L'application va redémarrer pour appliquer la mise à jour
+    // On ne fait rien de plus
+    logger.info('electron', '[Update] Application will restart to apply update');
   }
 
   app.on('activate', () => {
