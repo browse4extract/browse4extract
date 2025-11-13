@@ -18,8 +18,8 @@ export class UpdateLauncherWindow {
    */
   createWindow(): BrowserWindow {
     this.window = new BrowserWindow({
-      width: 600,
-      height: 400,
+      width: 800,
+      height: 600,
       frame: false,
       resizable: false,
       alwaysOnTop: true,

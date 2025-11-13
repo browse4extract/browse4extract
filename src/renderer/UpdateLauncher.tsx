@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { UpdateLauncherData } from '../types/update';
 import appLogo from './assets/app_image.png';
+import { getAppVersion } from './utils/buildInfo';
 
 /**
  * Update launcher interface
@@ -17,7 +18,7 @@ import appLogo from './assets/app_image.png';
 function UpdateLauncher() {
   const [launcherData, setLauncherData] = useState<UpdateLauncherData>({
     state: 'checking',
-    currentVersion: '0.0.0',
+    currentVersion: getAppVersion(), // Use buildInfo as fallback instead of '0.0.0'
   });
 
   useEffect(() => {
@@ -50,28 +51,33 @@ function UpdateLauncher() {
   };
 
   return (
-    <div className="h-screen w-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center overflow-hidden">
+    <div className="h-screen w-screen bg-[#000000] flex items-center justify-center overflow-hidden">
       <div className="w-full h-full flex flex-col items-center justify-center p-8">
         {/* Logo */}
         <div className="mb-8">
           <img
             src={appLogo}
             alt="Browse4Extract"
-            className="w-20 h-20 rounded-2xl shadow-2xl"
+            className="w-24 h-24 rounded-2xl shadow-2xl ring-2 ring-gray-800/50"
           />
         </div>
 
-        {/* Contenu principal */}
-        <div className="w-full max-w-md bg-gray-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/50 p-8">
+        {/* Main content container */}
+        <div className="w-full max-w-2xl bg-[#0a0a0a]/80 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-800/50 p-8">
           {/* State: Checking */}
           {launcherData.state === 'checking' && (
             <div className="text-center">
-              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  <Loader2 className="w-14 h-14 text-[#6fbb69] animate-spin" />
+                  <div className="absolute inset-0 blur-xl bg-[#6fbb69]/30 rounded-full"></div>
+                </div>
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 Checking for updates
               </h2>
               <p className="text-gray-400 text-sm">
-                Current version: {launcherData.currentVersion}
+                Current version: <span className="text-gray-300 font-medium">{launcherData.currentVersion}</span>
               </p>
             </div>
           )}
@@ -79,28 +85,38 @@ function UpdateLauncher() {
           {/* State: Update available */}
           {launcherData.state === 'update-available' && (
             <div className="text-center">
-              <Download className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  <Download className="w-14 h-14 text-[#6fbb69]" />
+                  <div className="absolute inset-0 blur-xl bg-[#6fbb69]/30 rounded-full"></div>
+                </div>
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 Update available
               </h2>
-              <p className="text-gray-400 text-sm mb-4">
-                {launcherData.currentVersion} → {launcherData.remoteVersion}
-              </p>
+              <div className="flex items-center justify-center gap-3 mb-6">
+                <span className="text-gray-400 font-medium">{launcherData.currentVersion}</span>
+                <div className="w-8 h-0.5 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7]"></div>
+                <span className="text-[#6fbb69] font-semibold">{launcherData.remoteVersion}</span>
+              </div>
 
               {/* Changelog */}
               {launcherData.changelog &&
                 launcherData.changelog.length > 0 && (
-                  <div className="mt-6 mb-4 bg-gray-900/50 rounded-lg p-4 max-h-40 overflow-y-auto text-left">
-                    <h3 className="text-sm font-semibold text-gray-300 mb-2">
-                      What's new:
-                    </h3>
-                    <ul className="space-y-1">
+                  <div className="mt-6 mb-6 bg-[#1a1a1a]/50 rounded-lg p-5 max-h-48 overflow-y-auto text-left border border-gray-800/30">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1 h-5 bg-gradient-to-b from-[#6fbb69] to-[#bf8fd7] rounded-full"></div>
+                      <h3 className="text-sm font-semibold text-gray-200">
+                        What's new
+                      </h3>
+                    </div>
+                    <ul className="space-y-2">
                       {launcherData.changelog.map((item, index) => (
                         <li
                           key={index}
-                          className="text-xs text-gray-400 flex items-start"
+                          className="text-sm text-gray-300 flex items-start"
                         >
-                          <span className="mr-2">•</span>
+                          <span className="mr-2 text-[#6fbb69]">•</span>
                           <span>{item}</span>
                         </li>
                       ))}
@@ -117,32 +133,39 @@ function UpdateLauncher() {
           {/* State: Downloading */}
           {launcherData.state === 'downloading' && (
             <div className="text-center">
-              <Download className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-pulse" />
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  <Download className="w-14 h-14 text-[#bf8fd7] animate-pulse" />
+                  <div className="absolute inset-0 blur-xl bg-[#bf8fd7]/30 rounded-full"></div>
+                </div>
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 Downloading
               </h2>
-              <p className="text-gray-400 text-sm mb-6">
-                Version {launcherData.remoteVersion}
+              <p className="text-gray-400 text-sm mb-8">
+                Version <span className="text-gray-300 font-medium">{launcherData.remoteVersion}</span>
               </p>
 
               {/* Progress bar */}
               {launcherData.progress && (
-                <div className="space-y-3">
-                  <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                <div className="space-y-4">
+                  <div className="w-full bg-[#1a1a1a] rounded-full h-3 overflow-hidden border border-gray-800/50">
                     <div
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                      className="bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] h-3 rounded-full transition-all duration-300 ease-out relative"
                       style={{
                         width: `${launcherData.progress.percent}%`,
                       }}
-                    />
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between text-xs text-gray-400">
+                  <div className="flex justify-between text-sm text-gray-400">
                     <span>
                       {formatBytes(launcherData.progress.transferred)} /{' '}
                       {formatBytes(launcherData.progress.total)}
                     </span>
-                    <span>
+                    <span className="text-gray-300 font-medium">
                       {launcherData.progress.percent.toFixed(1)}%
                     </span>
                   </div>
@@ -158,14 +181,19 @@ function UpdateLauncher() {
           {/* State: Installing */}
           {launcherData.state === 'installing' && (
             <div className="text-center">
-              <Loader2 className="w-12 h-12 text-purple-500 animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  <Loader2 className="w-14 h-14 text-[#bf8fd7] animate-spin" />
+                  <div className="absolute inset-0 blur-xl bg-[#bf8fd7]/30 rounded-full"></div>
+                </div>
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 Installing
               </h2>
               <p className="text-gray-400 text-sm">
-                Installing version {launcherData.remoteVersion}
+                Installing version <span className="text-gray-300 font-medium">{launcherData.remoteVersion}</span>
               </p>
-              <p className="text-xs text-gray-500 mt-4">
+              <p className="text-xs text-gray-500 mt-6 bg-[#1a1a1a]/50 rounded-lg py-3 px-4 border border-gray-800/30">
                 Application will restart automatically...
               </p>
             </div>
@@ -174,13 +202,20 @@ function UpdateLauncher() {
           {/* State: Error */}
           {launcherData.state === 'error' && (
             <div className="text-center">
-              {launcherData.error?.type === 'NO_INTERNET' ? (
-                <WifiOff className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-              ) : (
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              )}
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  {launcherData.error?.type === 'NO_INTERNET' ? (
+                    <WifiOff className="w-14 h-14 text-orange-500" />
+                  ) : (
+                    <AlertCircle className="w-14 h-14 text-red-500" />
+                  )}
+                  <div className={`absolute inset-0 blur-xl rounded-full ${
+                    launcherData.error?.type === 'NO_INTERNET' ? 'bg-orange-500/30' : 'bg-red-500/30'
+                  }`}></div>
+                </div>
+              </div>
 
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 {launcherData.error?.type === 'NO_INTERNET'
                   ? 'No internet connection'
                   : 'Error'}
@@ -192,7 +227,7 @@ function UpdateLauncher() {
 
               {launcherData.error?.type === 'NO_INTERNET' && (
                 <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 mb-6">
-                  <p className="text-xs text-orange-300">
+                  <p className="text-sm text-orange-300">
                     Without updates, some bugs may not be fixed and features may be missing.
                   </p>
                 </div>
@@ -202,14 +237,14 @@ function UpdateLauncher() {
               <div className="flex gap-3">
                 <button
                   onClick={handleRetry}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] hover:opacity-90 text-white px-5 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-lg"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Retry
                 </button>
                 <button
                   onClick={handleLaunchAnyway}
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-3 rounded-lg font-medium transition-colors"
+                  className="flex-1 bg-[#1a1a1a]/80 hover:bg-[#1a1a1a] border border-gray-700 text-gray-300 px-5 py-3 rounded-lg font-medium transition-all"
                 >
                   Launch anyway
                 </button>
@@ -220,8 +255,13 @@ function UpdateLauncher() {
           {/* State: Ready */}
           {launcherData.state === 'ready' && (
             <div className="text-center">
-              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <div className="mb-4 flex justify-center">
+                <div className="relative">
+                  <CheckCircle className="w-14 h-14 text-[#6fbb69]" />
+                  <div className="absolute inset-0 blur-xl bg-[#6fbb69]/30 rounded-full"></div>
+                </div>
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-100 mb-3">
                 Everything is up to date!
               </h2>
               <p className="text-gray-400 text-sm">
@@ -232,8 +272,8 @@ function UpdateLauncher() {
         </div>
 
         {/* Version at bottom */}
-        <div className="mt-8 text-xs text-gray-600">
-          Browse4Extract v{launcherData.currentVersion}
+        <div className="mt-8 text-sm text-gray-600">
+          Browse4Extract <span className="text-gray-500">v{launcherData.currentVersion}</span>
         </div>
       </div>
     </div>
