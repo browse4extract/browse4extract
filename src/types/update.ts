@@ -11,12 +11,12 @@ export interface RemoteVersionInfo {
   commitHash: string;
   releaseUrl: string;
   changelog?: string[];
-  downloads: {
+  downloadLinks: {
     windows?: {
       installer?: string;
       portable?: string;
     };
-    macOS?: {
+    macos?: {
       intel?: {
         dmg?: string;
         zip?: string;
@@ -27,7 +27,7 @@ export interface RemoteVersionInfo {
       };
     };
     linux?: {
-      appImage?: string;
+      appimage?: string;
       tarball?: string;
     };
   };

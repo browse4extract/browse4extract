@@ -249,7 +249,7 @@ export class UpdateChecker {
 
     switch (platform) {
       case 'windows':
-        const winDownloads = remoteVersion.downloads.windows;
+        const winDownloads = remoteVersion.downloadLinks.windows;
         if (!winDownloads) return undefined;
 
         if (installerType === 'installer') return winDownloads.installer;
@@ -258,7 +258,7 @@ export class UpdateChecker {
 
       case 'macOS':
         const macArch = arch === 'arm64' ? 'arm64' : 'intel';
-        const macDownloads = remoteVersion.downloads.macOS?.[macArch];
+        const macDownloads = remoteVersion.downloadLinks.macos?.[macArch];
         if (!macDownloads) return undefined;
 
         if (installerType === 'dmg') return macDownloads.dmg;
@@ -266,12 +266,12 @@ export class UpdateChecker {
         return macDownloads.dmg; // Fallback
 
       case 'linux':
-        const linuxDownloads = remoteVersion.downloads.linux;
+        const linuxDownloads = remoteVersion.downloadLinks.linux;
         if (!linuxDownloads) return undefined;
 
-        if (installerType === 'appImage') return linuxDownloads.appImage;
+        if (installerType === 'appImage') return linuxDownloads.appimage;
         if (installerType === 'tarball') return linuxDownloads.tarball;
-        return linuxDownloads.appImage; // Fallback
+        return linuxDownloads.appimage; // Fallback
     }
   }
 
