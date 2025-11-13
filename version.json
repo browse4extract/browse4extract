@@ -1,26 +1,26 @@
 {
-  "version": "1.3.2",
-  "buildDate": "2025-11-13T21:55:34Z",
-  "commitHash": "2de2181",
-  "releaseUrl": "https://github.com/browse4extract/browse4extract/releases/tag/v1.3.2",
+  "version": "1.4.0",
+  "buildDate": "2025-11-13T22:06:05Z",
+  "commitHash": "cca770f",
+  "releaseUrl": "https://github.com/browse4extract/browse4extract/releases/tag/v1.4.0",
   "downloadLinks": {
     "windows": {
-      "installer": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract.Setup.1.3.2.exe",
-      "portable": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2-win.zip"
+      "installer": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract.Setup.1.4.0.exe",
+      "portable": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0-win.zip"
     },
     "macos": {
       "intel": {
-        "dmg": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2.dmg",
-        "zip": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2-mac.zip"
+        "dmg": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0.dmg",
+        "zip": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0-mac.zip"
       },
       "arm64": {
-        "dmg": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2-arm64.dmg",
-        "zip": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2-arm64-mac.zip"
+        "dmg": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0-arm64.dmg",
+        "zip": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0-arm64-mac.zip"
       }
     },
     "linux": {
-      "appimage": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/Browse4Extract-1.3.2.AppImage",
-      "tarball": "https://github.com/browse4extract/browse4extract/releases/download/v1.3.2/browse4extract-1.3.2.tar.gz"
+      "appimage": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/Browse4Extract-1.4.0.AppImage",
+      "tarball": "https://github.com/browse4extract/browse4extract/releases/download/v1.4.0/browse4extract-1.4.0.tar.gz"
     }
   }
 }
