@@ -208,7 +208,7 @@ async function handleUpdateProcess(): Promise<boolean> {
       { percent: 0, transferred: 0, total: 0, speed: 0 }
     );
 
-    await updateChecker.downloadAndInstall(
+    const installResult = await updateChecker.downloadAndInstall(
       checkResult.remoteVersion,
       (progress) => {
         if (updateLauncher) {
@@ -221,12 +221,19 @@ async function handleUpdateProcess(): Promise<boolean> {
       }
     );
 
-    // Installation en cours (l'app va redémarrer automatiquement)
-    updateLauncher.setInstalling(currentVersion, checkResult.remoteVersion.version);
-
-    // L'application va redémarrer via app.relaunch() dans updateChecker
-    // Donc on retourne false pour indiquer qu'on ne doit pas continuer
-    return false;
+    if (installResult.requiresRestart) {
+      // Windows/Linux: Installation automatique, l'app va redémarrer
+      updateLauncher.setInstalling(currentVersion, checkResult.remoteVersion.version);
+      // L'application va redémarrer via app.relaunch() dans updateChecker
+      return false;
+    } else {
+      // macOS: Installation manuelle requise, lancer l'app
+      updateLauncher.setReady(currentVersion);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      updateLauncher.close();
+      logger.info('electron', '[Update] DMG opened for manual installation. Launching app...');
+      return true;
+    }
   } catch (error) {
     logger.error('electron', `[Update] Error during update process: ${error}`);
 

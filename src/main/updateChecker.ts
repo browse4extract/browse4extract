@@ -184,11 +184,12 @@ export class UpdateChecker {
    * Télécharge et installe la mise à jour
    * @param remoteVersion Informations de la version distante
    * @param onProgress Callback appelé pour suivre la progression
+   * @returns Object indicating if automatic restart is required
    */
   async downloadAndInstall(
     remoteVersion: RemoteVersionInfo,
     onProgress: (progress: DownloadProgress) => void
-  ): Promise<void> {
+  ): Promise<{ requiresRestart: boolean; platform: string }> {
     const platformInfo = this.getPlatformInfo();
     const downloadUrl = this.getDownloadUrl(remoteVersion, platformInfo);
 
@@ -201,11 +202,37 @@ export class UpdateChecker {
       throw new Error('Insecure download URL: HTTPS is required for updates');
     }
 
+    // Security: Validate download URL comes from trusted domain
+    try {
+      const urlObj = new URL(downloadUrl);
+      const trustedDomains = [
+        'github.com',
+        'objects.githubusercontent.com',
+        'github-releases.githubusercontent.com'
+      ];
+
+      if (!trustedDomains.includes(urlObj.hostname)) {
+        throw new Error(`Untrusted download domain: ${urlObj.hostname}. Only GitHub releases are allowed.`);
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error('Invalid download URL format');
+      }
+      throw error;
+    }
+
     // Download installer
     const installerPath = await this.downloadFile(downloadUrl, onProgress);
 
     // Install according to platform
     await this.installUpdate(installerPath, platformInfo);
+
+    // macOS requires manual installation, so app should continue running
+    // Windows and Linux automatically restart
+    return {
+      requiresRestart: platformInfo.platform !== 'macOS',
+      platform: platformInfo.platform
+    };
   }
 
   /**
@@ -327,8 +354,26 @@ export class UpdateChecker {
           10
         );
 
+        // Security: Validate file size (max 500MB for installers)
+        const MAX_DOWNLOAD_SIZE = 500 * 1024 * 1024; // 500MB
+        if (totalBytes > MAX_DOWNLOAD_SIZE) {
+          file.close();
+          fs.unlink(filePath, () => {});
+          reject(new Error(`Download too large: ${totalBytes} bytes (max ${MAX_DOWNLOAD_SIZE})`));
+          return;
+        }
+
         response.on('data', (chunk: Buffer) => {
           downloadedBytes += chunk.length;
+
+          // Security: Check downloaded bytes don't exceed declared size
+          if (downloadedBytes > totalBytes + 1024) { // Allow 1KB tolerance
+            file.close();
+            fs.unlink(filePath, () => {});
+            reject(new Error('Downloaded size exceeds declared content-length'));
+            return;
+          }
+
           const elapsed = (Date.now() - startTime) / 1000; // secondes
           const speed = elapsed > 0 ? downloadedBytes / elapsed : 0;
           const percent =
@@ -346,7 +391,28 @@ export class UpdateChecker {
 
         file.on('finish', () => {
           file.close();
-          resolve(filePath);
+
+          // Security: Verify downloaded file size matches expected
+          try {
+            const stats = fs.statSync(filePath);
+            if (totalBytes > 0 && Math.abs(stats.size - totalBytes) > 1024) {
+              fs.unlink(filePath, () => {});
+              reject(new Error(`Downloaded file size mismatch: expected ${totalBytes}, got ${stats.size}`));
+              return;
+            }
+
+            // Security: Verify file is not empty
+            if (stats.size === 0) {
+              fs.unlink(filePath, () => {});
+              reject(new Error('Downloaded file is empty'));
+              return;
+            }
+
+            resolve(filePath);
+          } catch (error) {
+            fs.unlink(filePath, () => {});
+            reject(new Error(`Failed to verify downloaded file: ${error}`));
+          }
         });
       });
 
@@ -459,15 +525,23 @@ export class UpdateChecker {
   }
 
   /**
-   * Détermine l'extension du fichier depuis l'URL
+   * Détermine l'extension du fichier depuis l'URL avec validation stricte
+   * Security: Use strict regex to prevent path traversal
    */
   private getFileExtension(url: string): string {
-    if (url.includes('.exe')) return '.exe';
-    if (url.includes('.dmg')) return '.dmg';
-    if (url.includes('.AppImage')) return '.AppImage';
-    if (url.includes('.zip')) return '.zip';
-    if (url.includes('.tar.gz')) return '.tar.gz';
-    return '';
+    // Extract filename from URL (after last /)
+    const urlParts = url.split('/');
+    const filename = urlParts[urlParts.length - 1];
+
+    // Strict regex validation for allowed extensions
+    if (/\.exe$/i.test(filename)) return '.exe';
+    if (/\.dmg$/i.test(filename)) return '.dmg';
+    if (/\.AppImage$/i.test(filename)) return '.AppImage';
+    if (/\.zip$/i.test(filename)) return '.zip';
+    if (/\.tar\.gz$/i.test(filename)) return '.tar.gz';
+
+    // No valid extension found
+    throw new Error(`Invalid or unsupported file extension in URL: ${filename}`);
   }
 
   /**
