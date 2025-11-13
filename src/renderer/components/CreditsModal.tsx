@@ -1,9 +1,10 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { X, Layers, Puzzle, Code, Sparkles, ExternalLink } from 'lucide-react';
+import { X, Layers, Puzzle, Code, Sparkles, ExternalLink, FileText } from 'lucide-react';
 import packageJson from '../../../package.json';
 import { getFullVersionString } from '../utils/buildInfo';
 import appIcon from '../assets/app_image.png';
+import ChangelogModal from './ChangelogModal';
 
 interface CreditsModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ interface B4ETool {
 }
 
 const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
+  const [showChangelog, setShowChangelog] = useState(false);
   // Fonction helper pour extraire la version sans le préfixe ^
   const getVersion = (pkg: string, isDev = false): string => {
     const deps: Record<string, string> = isDev
@@ -215,6 +217,7 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
   );
 
   return (
+    <>
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
@@ -252,9 +255,18 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
                         <Dialog.Title className="text-2xl font-bold bg-gradient-to-r from-[#6fbb69] to-[#bf8fd7] bg-clip-text text-transparent mb-1">
                           Browse4Extract
                         </Dialog.Title>
-                        <p className="text-sm text-gray-400">
-                          Version {getFullVersionString()}
-                        </p>
+                        <div className="flex items-center gap-3">
+                          <p className="text-sm text-gray-400">
+                            Version {getFullVersionString()}
+                          </p>
+                          <button
+                            onClick={() => setShowChangelog(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#1a1a1a] hover:bg-[#1a1a1a]/80 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-[#6fbb69] rounded-lg transition-all"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Changelog
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <button
@@ -406,6 +418,13 @@ const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose }) => {
         </div>
       </Dialog>
     </Transition>
+
+    {/* Changelog Modal */}
+    <ChangelogModal
+      isOpen={showChangelog}
+      onClose={() => setShowChangelog(false)}
+    />
+    </>
   );
 };
 
