@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/browse4extract/browse4extract/compare/v1.2.0...v1.3.0) (2025-11-13)
+
+
+### Features
+
+* internationalize update system and implement changelog.json with security improvements ([584ca9a](https://github.com/browse4extract/browse4extract/commit/584ca9a2a6294261e383559661f2712edb193fbe))
+
 ## [1.2.0](https://github.com/browse4extract/browse4extract/compare/v1.1.3...v1.2.0) (2025-11-12)
 
 
