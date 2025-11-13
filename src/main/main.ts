@@ -175,12 +175,14 @@ async function handleUpdateProcess(): Promise<boolean> {
           resolve(shouldContinue);
         };
 
-        const launchHandler = () => {
+        const launchHandler = async () => {
           ipcMain.removeListener('update-launcher:retry', retryHandler);
           ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
           // Lancer l'app quand même
           updateLauncher?.close();
+          // Wait for update window to fully close before continuing
+          await new Promise((r) => setTimeout(r, 300));
           resolve(true);
         };
 
@@ -194,6 +196,8 @@ async function handleUpdateProcess(): Promise<boolean> {
       updateLauncher.setReady(currentVersion);
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Afficher brièvement "Tout est à jour"
       updateLauncher.close();
+      // Wait for update window to fully close before continuing
+      await new Promise((resolve) => setTimeout(resolve, 300));
       return true;
     }
 
@@ -231,6 +235,8 @@ async function handleUpdateProcess(): Promise<boolean> {
       updateLauncher.setReady(currentVersion);
       await new Promise((resolve) => setTimeout(resolve, 2000));
       updateLauncher.close();
+      // Wait for update window to fully close before continuing
+      await new Promise((resolve) => setTimeout(resolve, 300));
       logger.info('electron', '[Update] DMG opened for manual installation. Launching app...');
       return true;
     }
@@ -254,11 +260,13 @@ async function handleUpdateProcess(): Promise<boolean> {
         resolve(shouldContinue);
       };
 
-      const launchHandler = () => {
+      const launchHandler = async () => {
         ipcMain.removeListener('update-launcher:retry', retryHandler);
         ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
         updateLauncher?.close();
+        // Wait for update window to fully close before continuing
+        await new Promise((r) => setTimeout(r, 300));
         resolve(true);
       };
 
