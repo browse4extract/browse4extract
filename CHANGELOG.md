@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/browse4extract/browse4extract/compare/v1.4.2...v1.5.0) (2025-11-16)
+
+
+### Features
+
+* use GitHub App token for release-please in organization ([bd90d79](https://github.com/browse4extract/browse4extract/commit/bd90d792c7a6fa1a481d79d2d3fdd53ff8080b10))
+
+
+### Chores
+
+* **release:** 1.4.2 ([07e0a4f](https://github.com/browse4extract/browse4extract/commit/07e0a4f8a77196a6daf02d8b8f5c86a25ad03d8f))
 
 ### [1.4.2](https://github.com/browse4extract/browse4extract/compare/v1.4.1...v1.4.2) (2025-11-16)
 
@@ -143,4 +154,3 @@ All notable changes to Browse4Extract will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-

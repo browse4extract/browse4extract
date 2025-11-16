@@ -1,6 +1,6 @@
 {
   "name": "browse4extract",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "A powerful Electron desktop application for extracting web data with visual element selection, featuring Discord integration and multiple export formats",
   "main": "dist/main/main.js",
   "repository": {
