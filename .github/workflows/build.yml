@@ -1,6 +1,11 @@
-name: Release Browse4Extract
+name: Build and Release
 
 on:
+  # Triggered automatically when release-please creates a release
+  release:
+    types: [published]
+
+  # Manual trigger (fallback if needed)
   workflow_dispatch:
     inputs:
       version:
@@ -9,7 +14,30 @@ on:
         type: string
 
 jobs:
+  # Determine version from release tag or manual input
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_manual: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Extract version from release tag (remove 'v' prefix)
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "Version from release tag: $VERSION"
+          else
+            # Manual trigger - use input
+            VERSION="${{ github.event.inputs.version }}"
+            echo "Version from manual input: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
   build:
+    needs: prepare
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -85,6 +113,7 @@ jobs:
         path: |
           out/*.exe
           out/*.zip
+          out/*.yml
         retention-days: 1
 
     - name: Upload artifacts (macOS Intel)
@@ -95,6 +124,7 @@ jobs:
         path: |
           out/*.dmg
           out/*.zip
+          out/*.yml
         retention-days: 1
 
     - name: Upload artifacts (macOS ARM64)
@@ -105,6 +135,7 @@ jobs:
         path: |
           out/*.dmg
           out/*.zip
+          out/*.yml
         retention-days: 1
 
     - name: Upload artifacts (Linux)
@@ -115,10 +146,11 @@ jobs:
         path: |
           out/*.AppImage
           out/*.tar.gz
+          out/*.yml
         retention-days: 1
 
   release:
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -138,7 +170,7 @@ jobs:
     - name: Extract changelog for version
       id: changelog
       run: |
-        VERSION="${{ github.event.inputs.version }}"
+        VERSION="${{ needs.prepare.outputs.version }}"
 
         # Extract the changelog section for this version
         # This captures everything from the version header until the next version header or end of file
@@ -159,12 +191,28 @@ jobs:
         echo "$CHANGELOG" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-    - name: Create Release
+    # Upload artifacts to existing release (when triggered by release-please)
+    - name: Upload artifacts to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.release.tag_name }}
+        files: |
+          artifacts/windows-artifacts/*
+          artifacts/macos-x64-artifacts/*
+          artifacts/macos-arm64-artifacts/*
+          artifacts/linux-artifacts/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Create new release (when triggered manually)
+    - name: Create new release
+      if: github.event_name == 'workflow_dispatch'
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ github.event.inputs.version }}
-        name: Browse4Extract v${{ github.event.inputs.version }}
+        tag_name: v${{ needs.prepare.outputs.version }}
+        name: Browse4Extract v${{ needs.prepare.outputs.version }}
         body: |
           ${{ steps.changelog.outputs.content }}
 
@@ -183,7 +231,7 @@ jobs:
 
     - name: Generate version.json and index.html for GitHub Pages
       run: |
-        VERSION="${{ github.event.inputs.version }}"
+        VERSION="${{ needs.prepare.outputs.version }}"
         BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         COMMIT_HASH=$(git rev-parse --short HEAD)
         REPO_URL="https://github.com/browse4extract/browse4extract"
@@ -553,6 +601,6 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./gh-pages-deploy
         publish_branch: gh-pages
-        commit_message: "Update version info for v${{ github.event.inputs.version }}"
+        commit_message: "Update version info for v${{ needs.prepare.outputs.version }}"
         user_name: 'github-actions[bot]'
         user_email: 'github-actions[bot]@users.noreply.github.com'

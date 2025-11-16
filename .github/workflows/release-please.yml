@@ -1,0 +1,37 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          # PRIVACY: This action runs 100% on GitHub's infrastructure
+          # No data is sent to Google - it's just an open-source tool
+          # Code is auditable: https://github.com/googleapis/release-please
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Release created
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          echo "✅ Release created!"
+          echo "Tag: ${{ steps.release.outputs.tag_name }}"
+          echo "Version: ${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}"
+          echo ""
+          echo "🚀 The build workflow will now automatically build and upload artifacts..."

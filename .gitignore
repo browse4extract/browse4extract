@@ -58,3 +58,7 @@ temp/
 # Windows artifacts
 nul
 assets/app_image.psd
+docs/GOOGLE_PRIVACY_PROOF.md
+docs/RELEASE_GUIDE.md
+docs/UPDATER_FIX_SUMMARY.md
+docs/MIGRATION_SUMMARY.md

@@ -6,8 +6,8 @@ import { Scraper } from './scraper';
 import { ConfigManager } from './configManager';
 import { DiscordRpcService } from './discordRpc';
 import { SessionManager } from './sessionManager';
-import { UpdateChecker } from './updateChecker';
-import { UpdateLauncherWindow, getErrorMessage } from './updateLauncher';
+import { autoUpdater } from 'electron-updater';
+import { UpdateLauncherWindow } from './updateLauncher';
 import { ScrapingConfig, LogMessage, ScrapedData, ExtractorType, AdvancedLogMessage, SessionProfile, SessionCreationResult } from '../types/types';
 import { logger } from './Logger';
 
@@ -134,11 +134,42 @@ function getIconPath(): string {
 
 
 /**
- * Handle the update check and installation process
+ * Compare two semantic versions
+ * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ */
+function compareVersions(v1: string, v2: string): number {
+  // Remove 'v' prefix if present
+  const clean1 = v1.replace(/^v/, '');
+  const clean2 = v2.replace(/^v/, '');
+
+  // Split into parts (major.minor.patch)
+  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p, 10) || 0);
+  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p, 10) || 0);
+
+  // Compare major, minor, patch
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+
+    if (p1 > p2) return 1;
+    if (p1 < p2) return -1;
+  }
+
+  return 0;
+}
+
+/**
+ * Handle the update check and installation process using electron-updater
  * @returns true if the application should continue, false if it restarts for update
  */
 async function handleUpdateProcess(): Promise<boolean> {
-  logger.info('electron', '[Update] Starting update process...');
+  logger.info('electron', '[Update] Starting update process with electron-updater...');
+
+  // Skip update check in development mode
+  if (process.env.NODE_ENV === 'development') {
+    logger.info('electron', '[Update] Development mode detected, skipping update check');
+    return true;
+  }
 
   // Create the launcher window
   updateLauncher = new UpdateLauncherWindow();
@@ -148,123 +179,153 @@ async function handleUpdateProcess(): Promise<boolean> {
   logger.info('electron', `[Update] Current version: ${currentVersion}`);
   updateLauncher.setChecking(currentVersion);
 
-  // Create the update checker
-  const updateChecker = new UpdateChecker({
-    versionUrl: 'https://browse4extract.github.io/browse4extract/version.json',
-    timeout: 10000,
-    autoDownload: true,
-  });
+  // Configure autoUpdater
+  autoUpdater.autoDownload = false; // We'll trigger download manually after showing changelog
+  autoUpdater.autoInstallOnAppQuit = true;
 
-  try {
-    // Check for updates
-    logger.info('electron', '[Update] Checking for updates...');
-    const checkResult = await updateChecker.checkForUpdates();
+  // Track update state
+  let newVersion = '';
+  let resolved = false;
 
-    if (checkResult.error) {
-      // Error encountered (no internet connection, etc.)
-      logger.warning('electron', `[Update] Error checking for updates: ${checkResult.error}`);
-      const errorMessage = getErrorMessage(checkResult.error);
-      updateLauncher.setError(currentVersion, checkResult.error, errorMessage);
+  return new Promise<boolean>((resolve) => {
+    // Safety timeout - if no response after 30 seconds, launch app anyway
+    const safetyTimeout = setTimeout(async () => {
+      if (!resolved) {
+        resolved = true;
+        logger.warning('electron', '[Update] Update check timed out after 30s, launching app anyway');
+        updateLauncher?.setReady(currentVersion);
+        await new Promise((r) => setTimeout(r, 1000));
+        updateLauncher?.close();
+        await new Promise((r) => setTimeout(r, 500));
+        resolve(true);
+      }
+    }, 30000); // 30 seconds timeout
 
-      // Wait for user choice (retry or launch anyway)
-      return new Promise((resolve) => {
-        // The user will click on one of the buttons
-        // which will trigger the IPC handlers below
-        const retryHandler = async () => {
-          ipcMain.removeListener('update-launcher:retry', retryHandler);
-          ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+    const safeResolve = async (value: boolean) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        resolve(value);
+      }
+    };
+    // Event: Checking for updates
+    autoUpdater.on('checking-for-update', () => {
+      logger.info('electron', '[Update] Checking for updates...');
+      updateLauncher?.setChecking(currentVersion);
+    });
 
-          // Retry checking
-          updateLauncher?.close();
-          const shouldContinue = await handleUpdateProcess();
-          resolve(shouldContinue);
-        };
+    // Event: Update available
+    autoUpdater.on('update-available', async (info) => {
+      newVersion = info.version;
+      logger.info('electron', `[Update] Update available: ${info.version}`);
 
-        const launchHandler = async () => {
-          ipcMain.removeListener('update-launcher:retry', retryHandler);
-          ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+      // Check if current version is higher (development version)
+      const versionComparison = compareVersions(currentVersion, info.version);
+      if (versionComparison > 0) {
+        // Current version is newer than available update - this is a development version
+        logger.info('electron', `[Update] Current version ${currentVersion} is higher than latest release ${info.version} - skipping update (development version)`);
+        updateLauncher?.setReady(currentVersion);
+        await new Promise((r) => setTimeout(r, 1000));
+        updateLauncher?.close();
+        await new Promise((r) => setTimeout(r, 500));
+        await safeResolve(true);
+        return;
+      }
 
-          // Launch app anyway
-          updateLauncher?.close();
-          // Wait for update window to fully close before continuing
-          await new Promise((r) => setTimeout(r, 300));
-          resolve(true);
-        };
-
-        ipcMain.once('update-launcher:retry', retryHandler);
-        ipcMain.once('update-launcher:launch-anyway', launchHandler);
-      });
-    }
-
-    if (!checkResult.available || !checkResult.remoteVersion) {
-      // No update available, continue
-      logger.info('electron', '[Update] No update available, launching app...');
-      updateLauncher.setReady(currentVersion);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Briefly display "Up to date"
-      updateLauncher.close();
-      // Wait for update window to fully close before continuing
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      logger.info('electron', '[Update] Update window closed, returning true to launch main window');
-      return true;
-    }
-
-    // Update available
-    updateLauncher.setUpdateAvailable(currentVersion, checkResult.remoteVersion);
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // Let user see the changelog
-
-    // Download and install
-    updateLauncher.setDownloading(
-      currentVersion,
-      checkResult.remoteVersion.version,
-      { percent: 0, transferred: 0, total: 0, speed: 0 }
-    );
-
-    const installResult = await updateChecker.downloadAndInstall(
-      checkResult.remoteVersion,
-      (progress) => {
-        if (updateLauncher) {
-          updateLauncher.setDownloading(
-            currentVersion,
-            checkResult.remoteVersion!.version,
-            progress
-          );
+      // Extract release notes as string array
+      let changelogArray: string[] = [];
+      if (info.releaseNotes) {
+        if (typeof info.releaseNotes === 'string') {
+          changelogArray = [info.releaseNotes];
+        } else if (Array.isArray(info.releaseNotes)) {
+          changelogArray = info.releaseNotes.map((note: any) =>
+            typeof note === 'string' ? note : (note.note || '')
+          ).filter(Boolean);
         }
       }
-    );
 
-    if (installResult.requiresRestart) {
-      // Windows/Linux: Automatic installation, app will restart
-      updateLauncher.setInstalling(currentVersion, checkResult.remoteVersion.version);
-      // The application will restart via app.relaunch() in updateChecker
-      return false;
-    } else {
-      // macOS: Manual installation required, launch app
-      updateLauncher.setReady(currentVersion);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      updateLauncher.close();
-      // Wait for update window to fully close before continuing
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      logger.info('electron', '[Update] DMG opened for manual installation. Launching app...');
-      return true;
-    }
-  } catch (error) {
-    logger.error('electron', `[Update] Error during update process: ${error}`);
+      // Show update available with changelog
+      updateLauncher?.setUpdateAvailable(currentVersion, {
+        version: info.version,
+        buildDate: new Date().toISOString(),
+        commitHash: '',
+        changelog: changelogArray,
+        releaseUrl: `https://github.com/browse4extract/browse4extract/releases/tag/v${info.version}`,
+        downloadLinks: {}
+      });
 
-    // In case of error, display message and allow launch
-    updateLauncher.setError(
-      currentVersion,
-      'FETCH_FAILED',
-      'An error occurred during the update. You can launch the application anyway.'
-    );
+      // Wait a bit to show changelog, then start download
+      setTimeout(() => {
+        logger.info('electron', '[Update] Starting download...');
+        updateLauncher?.setDownloading(currentVersion, newVersion, {
+          percent: 0,
+          transferred: 0,
+          total: 0,
+          speed: 0
+        });
+        autoUpdater.downloadUpdate();
+      }, 2000);
+    });
 
-    return new Promise((resolve) => {
+    // Event: Update not available
+    autoUpdater.on('update-not-available', async () => {
+      logger.info('electron', '[Update] No update available, launching app...');
+      updateLauncher?.setReady(currentVersion);
+      await new Promise((r) => setTimeout(r, 1000));
+      updateLauncher?.close();
+      await new Promise((r) => setTimeout(r, 500));
+      await safeResolve(true);
+    });
+
+    // Event: Download progress
+    autoUpdater.on('download-progress', (progressInfo) => {
+      const progress = {
+        percent: progressInfo.percent,
+        transferred: progressInfo.transferred,
+        total: progressInfo.total,
+        speed: progressInfo.bytesPerSecond || 0
+      };
+
+      updateLauncher?.setDownloading(currentVersion, newVersion, progress);
+    });
+
+    // Event: Update downloaded
+    autoUpdater.on('update-downloaded', async (info) => {
+      logger.info('electron', `[Update] Update downloaded: ${info.version}`);
+
+      // Show installing state
+      updateLauncher?.setInstalling(currentVersion, info.version);
+
+      // Wait a bit before installing
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Install and restart
+      logger.info('electron', '[Update] Installing update and restarting...');
+      autoUpdater.quitAndInstall(false, true);
+
+      // If we reach here, installation is happening
+      await safeResolve(false);
+    });
+
+    // Event: Error
+    autoUpdater.on('error', async (error) => {
+      logger.error('electron', `[Update] Error: ${error.message}`);
+
+      // Show error with option to retry or launch anyway
+      updateLauncher?.setError(
+        currentVersion,
+        'FETCH_FAILED',
+        error.message || 'An error occurred during the update. You can launch the application anyway.'
+      );
+
+      // Set up retry and launch handlers
       const retryHandler = async () => {
         ipcMain.removeListener('update-launcher:retry', retryHandler);
         ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
         updateLauncher?.close();
         const shouldContinue = await handleUpdateProcess();
-        resolve(shouldContinue);
+        await safeResolve(shouldContinue);
       };
 
       const launchHandler = async () => {
@@ -272,15 +333,46 @@ async function handleUpdateProcess(): Promise<boolean> {
         ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
 
         updateLauncher?.close();
-        // Wait for update window to fully close before continuing
-        await new Promise((r) => setTimeout(r, 300));
-        resolve(true);
+        await new Promise((r) => setTimeout(r, 500));
+        await safeResolve(true);
       };
 
       ipcMain.once('update-launcher:retry', retryHandler);
       ipcMain.once('update-launcher:launch-anyway', launchHandler);
     });
-  }
+
+    // Start checking for updates
+    autoUpdater.checkForUpdates().catch(async (error) => {
+      logger.error('electron', `[Update] Failed to check for updates: ${error.message}`);
+      updateLauncher?.setError(
+        currentVersion,
+        'FETCH_FAILED',
+        'Failed to check for updates. You can launch the application anyway.'
+      );
+
+      // Set up launch handler
+      const retryHandler = async () => {
+        ipcMain.removeListener('update-launcher:retry', retryHandler);
+        ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+        updateLauncher?.close();
+        const shouldContinue = await handleUpdateProcess();
+        await safeResolve(shouldContinue);
+      };
+
+      const launchHandler = async () => {
+        ipcMain.removeListener('update-launcher:retry', retryHandler);
+        ipcMain.removeListener('update-launcher:launch-anyway', launchHandler);
+
+        updateLauncher?.close();
+        await new Promise((r) => setTimeout(r, 500));
+        await safeResolve(true);
+      };
+
+      ipcMain.once('update-launcher:retry', retryHandler);
+      ipcMain.once('update-launcher:launch-anyway', launchHandler);
+    });
+  });
 }
 
 function createWindow(): void {
