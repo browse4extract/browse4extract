@@ -17,6 +17,13 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
     steps:
+      - name: Generate token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@v4
@@ -26,6 +33,7 @@ jobs:
           # Code is auditable: https://github.com/googleapis/release-please
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          token: ${{ steps.generate-token.outputs.token }}
 
       - name: Release created
         if: ${{ steps.release.outputs.release_created }}
