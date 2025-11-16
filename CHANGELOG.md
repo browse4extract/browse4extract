@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.4.1](https://github.com/browse4extract/browse4extract/compare/v1.4.0...v1.4.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* improve update system with timeout and dev detection ([de7481e](https://github.com/browse4extract/browse4extract/commit/de7481e70f9e590b584d806012cba97113e071b0))
+
 ## [1.4.0](https://github.com/browse4extract/browse4extract/compare/v1.3.0...v1.4.0) (2025-11-13)
 
 
