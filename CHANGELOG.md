@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.1](https://github.com/browse4extract/browse4extract/compare/v1.5.0...v1.5.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* resolve build release conflicts and use draft releases ([730cfe3](https://github.com/browse4extract/browse4extract/commit/730cfe371c32e1add387480084586b945b4cf9a3))
+
 ## [1.5.0](https://github.com/browse4extract/browse4extract/compare/v1.4.2...v1.5.0) (2025-11-16)
 
 
