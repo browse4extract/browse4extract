@@ -88,6 +88,11 @@
   "build": {
     "appId": "com.github.browse4extract",
     "productName": "Browse4Extract",
+    "publish": {
+      "provider": "github",
+      "owner": "browse4extract",
+      "repo": "browse4extract"
+    },
     "directories": {
       "output": "out"
     },

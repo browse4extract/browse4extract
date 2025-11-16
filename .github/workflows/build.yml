@@ -1,9 +1,9 @@
 name: Build and Release
 
 on:
-  # Triggered automatically when release-please creates a release
+  # Triggered automatically when release-please creates a draft release
   release:
-    types: [published]
+    types: [created]
 
   # Manual trigger (fallback if needed)
   workflow_dispatch:
@@ -83,19 +83,19 @@ jobs:
 
     - name: Package application (Windows)
       if: matrix.platform == 'windows'
-      run: npm run package -- --win nsis zip
+      run: npm run package -- --win nsis zip -p never
 
     - name: Package application (macOS Intel)
       if: matrix.platform == 'macos' && matrix.arch == 'x64'
-      run: npm run package -- --mac dmg zip --x64
+      run: npm run package -- --mac dmg zip --x64 -p never
 
     - name: Package application (macOS ARM64)
       if: matrix.platform == 'macos' && matrix.arch == 'arm64'
-      run: npm run package -- --mac dmg zip --arm64
+      run: npm run package -- --mac dmg zip --arm64 -p never
 
     - name: Package application (Linux)
       if: matrix.platform == 'linux'
-      run: npm run package -- --linux AppImage tar.gz
+      run: npm run package -- --linux AppImage tar.gz -p never
 
     - name: Upload artifacts (Windows)
       if: matrix.platform == 'windows'
