@@ -35,6 +35,16 @@ jobs:
           manifest-file: .release-please-manifest.json
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: Auto-merge release PR
+        if: ${{ steps.release.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          echo "✅ Release PR created: ${{ steps.release.outputs.pr }}"
+          echo "🔄 Auto-merging release PR..."
+          gh pr merge ${{ steps.release.outputs.pr }} --squash --delete-branch
+          echo "✅ Release PR merged! Release will be created automatically..."
+
       - name: Release created
         if: ${{ steps.release.outputs.release_created }}
         run: |

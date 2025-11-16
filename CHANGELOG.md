@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.2](https://github.com/browse4extract/browse4extract/compare/v1.5.1...v1.5.2) (2025-11-16)
+
+
+### Chores
+
+* **master:** release browse4extract 1.5.0 ([b1450bc](https://github.com/browse4extract/browse4extract/commit/b1450bc0ec76d5330dc5037a8ede50092fc4687d))
+* **master:** release browse4extract 1.5.0 ([83d4fdb](https://github.com/browse4extract/browse4extract/commit/83d4fdba2125ed05c94b942ee2c333c3c1baa4d3))
+* **master:** release browse4extract 1.5.1 ([5e8b461](https://github.com/browse4extract/browse4extract/commit/5e8b461df75a120e74790c51e2925735d4edf4e9))
+* **master:** release browse4extract 1.5.1 ([ed6928b](https://github.com/browse4extract/browse4extract/commit/ed6928b64e14f4891ea25936d15266e2c0c59614))
+
 ## [1.5.1](https://github.com/browse4extract/browse4extract/compare/browse4extract-v1.5.0...browse4extract-v1.5.1) (2025-11-16)
 
 
