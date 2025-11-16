@@ -39,10 +39,11 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ steps.release.outputs.pr }}
         run: |
-          echo "✅ Release PR created: ${{ steps.release.outputs.pr }}"
+          echo "✅ Release PR created: #${PR_NUMBER}"
           echo "🔄 Auto-merging release PR..."
-          gh pr merge ${{ steps.release.outputs.pr }} --squash --delete-branch
+          gh pr merge "${PR_NUMBER}" --squash --delete-branch
           echo "✅ Release PR merged! Release will be created automatically..."
 
       - name: Release created
