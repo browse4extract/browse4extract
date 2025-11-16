@@ -182,6 +182,7 @@ async function handleUpdateProcess(): Promise<boolean> {
   // Configure autoUpdater
   autoUpdater.autoDownload = false; // We'll trigger download manually after showing changelog
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoRunAppAfterInstall = true; // Ensure app relaunches after update
 
   // Track update state
   let newVersion = '';
@@ -296,12 +297,12 @@ async function handleUpdateProcess(): Promise<boolean> {
       // Show installing state
       updateLauncher?.setInstalling(currentVersion, info.version);
 
-      // Wait a bit before installing
-      await new Promise((r) => setTimeout(r, 1000));
+      // Wait for clean shutdown before installing
+      await new Promise((r) => setTimeout(r, 2000));
 
-      // Install and restart
+      // Install and restart (silent mode ensures relaunch works reliably)
       logger.info('electron', '[Update] Installing update and restarting...');
-      autoUpdater.quitAndInstall(false, true);
+      autoUpdater.quitAndInstall(true, true);
 
       // If we reach here, installation is happening
       await safeResolve(false);
