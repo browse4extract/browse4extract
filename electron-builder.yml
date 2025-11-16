@@ -5,12 +5,6 @@ copyright: Copyright © 2025
 directories:
   output: out
 
-publish:
-  provider: github
-  owner: browse4extract
-  repo: browse4extract
-  releaseType: release
-
 extraResources:
   - from: assets
     to: assets

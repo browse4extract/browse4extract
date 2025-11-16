@@ -84,26 +84,18 @@ jobs:
     - name: Package application (Windows)
       if: matrix.platform == 'windows'
       run: npm run package -- --win nsis zip
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Package application (macOS Intel)
       if: matrix.platform == 'macos' && matrix.arch == 'x64'
       run: npm run package -- --mac dmg zip --x64
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Package application (macOS ARM64)
       if: matrix.platform == 'macos' && matrix.arch == 'arm64'
       run: npm run package -- --mac dmg zip --arm64
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Package application (Linux)
       if: matrix.platform == 'linux'
       run: npm run package -- --linux AppImage tar.gz
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload artifacts (Windows)
       if: matrix.platform == 'windows'
@@ -156,6 +148,13 @@ jobs:
       contents: write
 
     steps:
+    - name: Generate GitHub App token
+      id: generate-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ secrets.APP_ID }}
+        private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -202,8 +201,15 @@ jobs:
           artifacts/macos-x64-artifacts/*
           artifacts/macos-arm64-artifacts/*
           artifacts/linux-artifacts/*
+        token: ${{ steps.generate-token.outputs.token }}
+
+    # Publish the draft release (change draft -> published)
+    - name: Publish draft release
+      if: github.event_name == 'release' && github.event.release.draft == true
+      run: |
+        gh release edit ${{ github.event.release.tag_name }} --draft=false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
     # Create new release (when triggered manually)
     - name: Create new release
@@ -226,8 +232,7 @@ jobs:
           artifacts/linux-artifacts/*
         draft: true
         prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ steps.generate-token.outputs.token }}
 
     - name: Generate version.json and index.html for GitHub Pages
       run: |
@@ -598,7 +603,7 @@ jobs:
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        github_token: ${{ steps.generate-token.outputs.token }}
         publish_dir: ./gh-pages-deploy
         publish_branch: gh-pages
         commit_message: "Update version info for v${{ needs.prepare.outputs.version }}"

@@ -1,5 +1,7 @@
 {
   "release-type": "node",
+  "draft": true,
+  "pull-request-title-pattern": "chore(master): release browse4extract ${version}",
   "packages": {
     ".": {
       "package-name": "browse4extract",
